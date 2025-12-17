@@ -172,8 +172,8 @@ const EmployeeTable = ({ employees, isLoading, onDeleteEmployee }) => {
                     <Avatar name={employee.name} size="md" />
                   </div>
                   <div className="flex flex-col">
-                    <h3 className="font-medium">{employee.name || 'N/A'}</h3>
-                    <span className="text-xs text-[var(--primary-color)]">
+                    <h3 className="font-medium whitespace-nowrap">{employee.name || 'N/A'}</h3>
+                    <span className="text-xs text-[var(--primary-color)] whitespace-nowrap">
                       {employee.role || 'Employee'}
                     </span>
                   </div>
@@ -182,7 +182,7 @@ const EmployeeTable = ({ employees, isLoading, onDeleteEmployee }) => {
 
               {/* Phone */}
               <td>
-                <span className={employee.phone ? "text-base-content" : "text-base-content/40 italic"}>
+                <span className={employee.phone ? "text-base-content" : "text-base-content/40 italic whitespace-nowrap"}>
                   {employee.phone || 'N/A'}
                 </span>
               </td>
@@ -345,20 +345,20 @@ const EmployeeTable = ({ employees, isLoading, onDeleteEmployee }) => {
             </div>
 
             {/* Footer Actions */}
-            <div className="flex items-center gap-3 px-8 py-5 bg-base-200/30 border-t border-base-200 flex-shrink-0">
+            <div className="flex items-center gap-3 px-4 py-5 bg-base-200/30 border-t border-base-200 flex-shrink-0">
               <button 
                 onClick={() => router.push(`/Dashboard/Employees/Tracking/${selectedEmployee._id}`)} 
                 className="btn bg-[var(--primary-color)] text-white rounded-sm flex-1 gap-2 shadow-sm hover:bg-[var(--primary-color)]/90"
               >
                 <LayoutDashboard className="h-4 w-4" />
-                Track Record
+                 Record
               </button>
               <button 
                 onClick={() => router.push(`/Dashboard/Employees/Edit/${selectedEmployee._id}`)} 
                 className="btn bg-secondary text-secondary-content rounded-sm flex-1 gap-2 shadow-sm "
               >
                 <Edit className="h-4 w-4" />
-                Edit Profile
+                Edit 
               </button>
               <button 
                 onClick={(e) => {

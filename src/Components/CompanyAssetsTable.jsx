@@ -237,10 +237,10 @@ const CompanyAssetsTable = ({ assets, isLoading, onDeleteAsset, onUpdateAsset })
             <tr>
               <th>S.No</th>
               <th>Asset Name</th>
-              <th>Assignment</th>
+              <th className="hidden md:block">Assignment</th>
               <th>Serial No</th>
               <th>Status</th>
-              <th>Date</th>
+              <th className=''>Date</th>
             </tr>
           </thead>
           <tbody>
@@ -253,14 +253,14 @@ const CompanyAssetsTable = ({ assets, isLoading, onDeleteAsset, onUpdateAsset })
                       <AssetAvatar name={asset.name} size="md" />
                     </div>
                     <div className="flex flex-col">
-                      <h3 className="font-medium">{asset.name || 'N/A'}</h3>
-                      <span className="text-xs text-[var(--primary-color)]">{asset.category || 'Asset'}</span>
+                      <h3 className="font-medium whitespace-nowrap">{asset.name || 'N/A'}</h3>
+                      <span className="text-xs text-[var(--primary-color)] whitespace-nowrap">{asset.category || 'Asset'}</span>
                     </div>
                   </div>
                 </td>
-                <td>
+                <td className='hidden  md:flex mt-2 items-center'>
                   {asset.currentProject?.name ? (
-                    <div className="flex items-center gap-1.5 text-xs font-medium text-[var(--primary-color)]">
+                    <div className=" items-center gap-1.5 flex whitespace-nowrap text-xs font-medium text-[var(--primary-color)]">
                       <Briefcase className="w-3.5 h-3.5" />
                       {asset.currentProject.name}
                     </div>
@@ -276,7 +276,7 @@ const CompanyAssetsTable = ({ assets, isLoading, onDeleteAsset, onUpdateAsset })
                       <span className="text-yellow-600 text-sm font-medium">{asset.status}</span>
                   )}
                 </td>
-                <td className="text-sm">{formatDate(asset.purchaseDate)}</td>
+                <td className="text-sm whitespace-nowrap">{formatDate(asset.purchaseDate)}</td>
               </tr>
             ))}
           </tbody>
@@ -354,13 +354,13 @@ const CompanyAssetsTable = ({ assets, isLoading, onDeleteAsset, onUpdateAsset })
             </div>
 
             {/* Footer Actions */}
-            <div className="flex items-center gap-3 px-8 py-5 bg-base-200/30 border-t border-base-200 flex-shrink-0">
+            <div className="flex items-center gap-3 px-4 py-5 bg-base-200/30 border-t border-base-200 flex-shrink-0">
               
              <button 
                 onClick={() => router.push(`/Dashboard/Company-Assets/Record/${selectedAsset._id}`)}
                 className="btn bg-[var(--primary-color)] text-white rounded-sm flex-1 gap-2 shadow-sm hover:bg-[var(--primary-color)]/90"
               >
-                <LayoutDashboard className="w-4 h-4" /> Track Record
+                <LayoutDashboard className="w-4 h-4" /> Track
               </button>
 
               {/* 2. Edit Button */}

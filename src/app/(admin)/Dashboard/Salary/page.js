@@ -157,7 +157,7 @@ const EmployeeSalaryList = () => {
                 <th>Employee</th>
                 
                 <th>Iqama</th>
-                <th>Phone</th>
+            
                 <th>Status</th>
                 
                
@@ -181,15 +181,15 @@ const EmployeeSalaryList = () => {
                         </div>
 
                         <div>
-                          <h3 className="font-medium">{emp.name}</h3>
-                          <p className="text-xs text-base-content/70">{emp.role}</p>
+                          <h3 className="font-medium whitespace-nowrap">{emp.name}</h3>
+                          <p className="text-xs text-base-content/70 whitespace-nowrap">{emp.role}</p>
                         </div>
                       </div>
                     </td>
 
                     
                     <td className=" text-sm">{emp.iqamaNumber}</td>
-                    <td className='text-sm'>{emp.phone ?? "N/A"}</td>
+                  
                     <td>
                       {emp.status ? (
                         <span className="text-success font-medium">
