@@ -13,6 +13,9 @@ import {
   Check,
   BriefcaseBusiness,
   FileText,
+  Clock,
+  CheckCircle,
+  PieChart // New Icon for Partial
 } from "lucide-react";
 import axios from "axios";
 import { errorToast } from "@/lib/toast";
@@ -23,15 +26,22 @@ const EXPENSE_TYPES = ["Loan", "Reimbursement", "Advance", "Other"];
 
 const getExpenseBadgeClass = (type) => {
   switch (type) {
-    case "Loan":
-      return "badge-error";
-    case "Reimbursement":
-      return "badge-success";
-    case "Advance":
-      return "badge-warning";
-    case "Other":
+    case "Loan": return "badge-error";
+    case "Reimbursement": return "badge-success";
+    case "Advance": return "badge-warning";
+    default: return "badge-info";
+  }
+};
+
+// --- HELPER: STATUS BADGE LOGIC ---
+const getStatusBadge = (status) => {
+  switch (status) {
+    case "Completed":
+      return "badge-success text-white"; // Green
+    case "Partial":
+      return "badge-info text-white";    // Blue
     default:
-      return "badge-info";
+      return "badge-warning";            // Yellow (Pending)
   }
 };
 
@@ -40,7 +50,7 @@ const currencyFormatter = new Intl.NumberFormat("en-US", {
   currency: "SAR",
 });
 
-// --- CUSTOM DROPDOWN COMPONENT ---
+// --- CUSTOM DROPDOWN (Unchanged) ---
 const CustomDropdown = ({ value, onChange, options, disabled }) => {
   const [isOpen, setIsOpen] = useState(false);
   const dropdownRef = useRef(null);
@@ -51,14 +61,8 @@ const CustomDropdown = ({ value, onChange, options, disabled }) => {
         setIsOpen(false);
       }
     };
-
-    if (isOpen) {
-      document.addEventListener("mousedown", handleClickOutside);
-    }
-
-    return () => {
-      document.removeEventListener("mousedown", handleClickOutside);
-    };
+    if (isOpen) document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
   }, [isOpen]);
 
   const handleSelect = (option) => {
@@ -80,11 +84,7 @@ const CustomDropdown = ({ value, onChange, options, disabled }) => {
           <span className={`badge ${getExpenseBadgeClass(value)} badge-sm`}>
             {value}
           </span>
-          <ChevronDown
-            className={`w-4 h-4 text-base-content/60 transition-transform ${
-              isOpen ? "rotate-180" : ""
-            }`}
-          />
+          <ChevronDown className={`w-4 h-4 text-base-content/60 transition-transform ${isOpen ? "rotate-180" : ""}`} />
         </div>
       </button>
 
@@ -99,9 +99,7 @@ const CustomDropdown = ({ value, onChange, options, disabled }) => {
                 value === option ? "bg-base-200" : ""
               }`}
             >
-              <span className={"text-sm"}>
-                {option}
-              </span>
+              <span className={"text-sm"}>{option}</span>
               {value === option && (
                 <Check className="w-4 h-4" style={{ color: "var(--primary-color)" }} />
               )}
@@ -113,7 +111,7 @@ const CustomDropdown = ({ value, onChange, options, disabled }) => {
   );
 };
 
-// --- ADD EXPENSE MODAL ---
+// --- ADD EXPENSE MODAL (Unchanged) ---
 const AddExpenseModal = ({ isOpen, onClose, employeeId, onSave }) => {
   const [formData, setFormData] = useState({
     type: EXPENSE_TYPES[0],
@@ -148,12 +146,10 @@ const AddExpenseModal = ({ isOpen, onClose, employeeId, onSave }) => {
   };
 
   const handleSubmit = async () => {
-    // Validation
     if (!formData.amount || !formData.date || !formData.description.trim()) {
       setError("Please fill in all required fields");
       return;
     }
-
     if (parseFloat(formData.amount) <= 0) {
       setError("Amount must be greater than 0");
       return;
@@ -170,6 +166,7 @@ const AddExpenseModal = ({ isOpen, onClose, employeeId, onSave }) => {
         amount: parseFloat(formData.amount),
         description: formData.description.trim(),
         status: "Pending",
+        paidAmount: 0, // Initialize as 0 paid
       };
 
       await onSave(newExpense);
@@ -188,31 +185,21 @@ const AddExpenseModal = ({ isOpen, onClose, employeeId, onSave }) => {
     <div className="modal modal-open">
       <div className="modal-box w-11/12 max-w-2xl">
         <div className="flex items-center justify-between mb-4">
-          <h3 className="font-semibold text-base text-base-content">
-            Add New Expense
-          </h3>
-          <button
-            onClick={onClose}
-            disabled={isSubmitting}
-            className="btn btn-ghost btn-xs btn-circle"
-          >
+          <h3 className="font-semibold text-base text-base-content">Add New Expense</h3>
+          <button onClick={onClose} disabled={isSubmitting} className="btn btn-ghost btn-xs btn-circle">
             <X className="w-4 h-4" />
           </button>
         </div>
-
         {error && (
           <div className="alert alert-error mb-4">
             <AlertCircle className="w-4 h-4" />
             <span className="text-xs">{error}</span>
           </div>
         )}
-
         <div className="space-y-3">
           <div className="form-control w-full">
             <label className="label py-1">
-              <span className="label-text text-xs font-medium">
-                Expense Type
-              </span>
+              <span className="label-text text-xs font-medium">Expense Type</span>
             </label>
             <CustomDropdown
               value={formData.type}
@@ -225,9 +212,7 @@ const AddExpenseModal = ({ isOpen, onClose, employeeId, onSave }) => {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
             <div className="form-control w-full">
               <label className="label py-1">
-                <span className="label-text text-xs font-medium">
-                  Amount (SAR) *
-                </span>
+                <span className="label-text text-xs font-medium">Amount (SAR) *</span>
               </label>
               <input
                 type="number"
@@ -259,9 +244,7 @@ const AddExpenseModal = ({ isOpen, onClose, employeeId, onSave }) => {
 
           <div className="form-control w-full">
             <label className="label py-1">
-              <span className="label-text text-xs font-medium">
-                Description *
-              </span>
+              <span className="label-text text-xs font-medium">Description *</span>
             </label>
             <textarea
               name="description"
@@ -272,57 +255,24 @@ const AddExpenseModal = ({ isOpen, onClose, employeeId, onSave }) => {
               rows={3}
               className="textarea textarea-bordered textarea-sm w-full resize-none text-sm"
             />
-            <label className="label py-0">
-              <span className="label-text-alt text-xs">
-                {formData.description.length}/500 characters
-              </span>
-            </label>
           </div>
 
           <div className="flex flex-col-reverse sm:flex-row justify-end gap-2 pt-3">
-            <button
-              type="button"
-              onClick={onClose}
-              disabled={isSubmitting}
-              className="btn btn-ghost btn-sm w-full sm:w-auto text-sm"
-            >
-              Cancel
-            </button>
-            <button
-              onClick={handleSubmit}
-              disabled={isSubmitting}
-              className="btn btn-sm text-white w-full sm:w-auto text-sm"
-              style={{ backgroundColor: "var(--primary-color)" }}
-            >
-              {isSubmitting ? (
-                <>
-                  <span className="loading loading-spinner loading-xs"></span>
-                  Saving...
-                </>
-              ) : (
-                "Save Expense"
-              )}
+            <button type="button" onClick={onClose} disabled={isSubmitting} className="btn btn-ghost btn-sm w-full sm:w-auto text-sm">Cancel</button>
+            <button onClick={handleSubmit} disabled={isSubmitting} className="btn btn-sm text-white w-full sm:w-auto text-sm" style={{ backgroundColor: "var(--primary-color)" }}>
+              {isSubmitting ? "Saving..." : "Save Expense"}
             </button>
           </div>
         </div>
       </div>
-      <div
-        className="modal-backdrop"
-        onClick={!isSubmitting ? onClose : undefined}
-      ></div>
+      <div className="modal-backdrop" onClick={!isSubmitting ? onClose : undefined}></div>
     </div>
   );
 };
 
-// --- DELETE CONFIRMATION MODAL ---
-const DeleteConfirmationModal = ({
-  isOpen,
-  onClose,
-  onConfirm,
-  isDeleting,
-}) => {
+// --- DELETE CONFIRMATION (Unchanged) ---
+const DeleteConfirmationModal = ({ isOpen, onClose, onConfirm, isDeleting }) => {
   if (!isOpen) return null;
-
   return (
     <div className="modal modal-open">
       <div className="modal-box w-11/12 max-w-md">
@@ -331,44 +281,17 @@ const DeleteConfirmationModal = ({
             <AlertCircle className="w-5 h-5 text-error" />
           </div>
           <div className="flex-1">
-            <h3 className="font-semibold text-base text-base-content mb-1">
-              Delete Expense
-            </h3>
-            <p className="text-xs text-base-content/70">
-              Are you sure you want to delete this expense record? This action
-              cannot be undone.
-            </p>
+            <h3 className="font-semibold text-base text-base-content mb-1">Delete Expense</h3>
+            <p className="text-xs text-base-content/70">Are you sure? This cannot be undone.</p>
           </div>
         </div>
         <div className="flex flex-col-reverse sm:flex-row justify-end gap-2">
-          <button
-            type="button"
-            onClick={onClose}
-            disabled={isDeleting}
-            className="btn btn-ghost btn-sm w-full sm:w-auto text-sm"
-          >
-            Cancel
-          </button>
-          <button
-            onClick={onConfirm}
-            disabled={isDeleting}
-            className="btn btn-error btn-sm w-full sm:w-auto text-sm"
-          >
-            {isDeleting ? (
-              <>
-                <span className="loading loading-spinner loading-xs"></span>
-                Deleting...
-              </>
-            ) : (
-              "Delete"
-            )}
+          <button onClick={onClose} disabled={isDeleting} className="btn btn-ghost btn-sm w-full sm:w-auto text-sm">Cancel</button>
+          <button onClick={onConfirm} disabled={isDeleting} className="btn btn-error btn-sm w-full sm:w-auto text-sm">
+            {isDeleting ? "Deleting..." : "Delete"}
           </button>
         </div>
       </div>
-      <div
-        className="modal-backdrop"
-        onClick={!isDeleting ? onClose : undefined}
-      ></div>
     </div>
   );
 };
@@ -378,13 +301,9 @@ const EmployeeExpenseDetails = () => {
   const router = useRouter();
   const params = useParams();
   const employeeId = params.id;
-  console.log(employeeId);
 
   const [isModalOpen, setIsModalOpen] = useState(false);
-  const [deleteModal, setDeleteModal] = useState({
-    isOpen: false,
-    expenseId: null,
-  });
+  const [deleteModal, setDeleteModal] = useState({ isOpen: false, expenseId: null });
   const [isDeleting, setIsDeleting] = useState(false);
   const [expenses, setExpenses] = useState([]);
   const [employee, setEmployee] = useState(null);
@@ -392,196 +311,93 @@ const EmployeeExpenseDetails = () => {
   const [error, setError] = useState(null);
   const [isRefreshing, setIsRefreshing] = useState(false);
 
-  // Fetch employee and expenses
+  // Fetch Data (Same logic, assumes Backend returns 'paidAmount')
   const fetchData = async (showRefreshIndicator = false) => {
-    if (showRefreshIndicator) {
-      setIsRefreshing(true);
-    } else {
-      setIsLoading(true);
-    }
+    if (showRefreshIndicator) setIsRefreshing(true);
+    else setIsLoading(true);
     setError(null);
 
     try {
-      // Fetch employee by ID
       const empResponse = await axios.get(`/api/employee/getEmployee/${employeeId}`);
-      const success = empResponse.data.success;
-      if (!success) {
-        errorToast(empResponse.data.message || "Failed to fetch employee");
-        setIsLoading(false);
-        setIsRefreshing(false);
-        console.log("hello");
+      if (!empResponse.data.success) {
+        errorToast("Failed to fetch employee");
         router.push("/Dashboard/Employees/Expense");
-
         return;
       }
+      setEmployee(empResponse.data.employee);
 
-      const employeeData = empResponse.data.employee;
-      setEmployee(employeeData);
-      console.log(employeeData);
-
-      // Fetch expenses for this employee
-      const expResponse = await axios.get(
-        `/api/employee/expenses?employeeId=${employeeData._id}&limit=100`
-      );
-
-      if (!expResponse.data.success) {
-        errorToast(expResponse.data.message || "Failed to fetch expenses");
-        throw new Error(expResponse.data.message || "Failed to fetch expenses");
-      }
-
+      const expResponse = await axios.get(`/api/employee/expenses?employeeId=${empResponse.data.employee._id}&limit=100`);
+      if (!expResponse.data.success) throw new Error(expResponse.data.message);
+      
       setExpenses(expResponse.data.data.expenses);
     } catch (err) {
-      console.error("Error fetching data:", err);
-      errorToast("Something Went Wrong");
-      if (err.response?.status === 404) {
-        setError("Employee not found");
-      } else if (err.response?.status === 400) {
-        setError("Invalid employee ID");
-      } else {
-        setError(
-          err.response?.data?.message ||
-            err.message ||
-            "Failed to load employee data"
-        );
-      }
+      console.error(err);
+      setError(err.response?.data?.message || "Failed to load data");
     } finally {
       setIsLoading(false);
       setIsRefreshing(false);
     }
   };
 
-  useEffect(() => {
-    if (employeeId) {
-      fetchData();
-    }
-  }, [employeeId]);
+  useEffect(() => { if (employeeId) fetchData(); }, [employeeId]);
 
-  // Add expense
   const handleAddExpense = async (newExpenseData) => {
     try {
       const response = await axios.post("/api/employee/expenses/add", newExpenseData);
-
-      if (!response.data.success) {
-        throw new Error(response.data.message || "Failed to create expense");
-      }
-
-      // Refresh data to get updated list
+      if (!response.data.success) throw new Error(response.data.message);
       await fetchData(true);
     } catch (err) {
-      console.error("Error adding expense:", err);
+      console.error(err);
       throw err;
     }
   };
 
-  // Open delete confirmation
   const handleDeleteClick = (expenseId) => {
     setDeleteModal({ isOpen: true, expenseId });
   };
 
-  // Confirm delete
   const handleConfirmDelete = async () => {
     setIsDeleting(true);
-
     try {
-      const response = await axios.delete(
-        `/api/employee/expenses/delete/${deleteModal.expenseId}`
-      );
-
-      if (!response.data.success) {
-        throw new Error(response.data.message || "Failed to delete expense");
-      }
-
-      // Refresh data
+      await axios.delete(`/api/employee/expenses/delete/${deleteModal.expenseId}`);
       await fetchData(true);
-
       setDeleteModal({ isOpen: false, expenseId: null });
     } catch (err) {
-      console.error("Error deleting expense:", err);
-      alert(err.response?.data?.message || "Failed to delete expense");
+      alert("Failed to delete expense");
     } finally {
       setIsDeleting(false);
     }
   };
 
-  // Manual refresh
-  const handleRefresh = () => {
-    fetchData(true);
-  };
+  // --- NEW CALCULATION LOGIC FOR PARTIAL PAYMENTS ---
+  
+  // Calculate how much is actually remaining to be paid
+  const totalLiability = expenses.reduce((sum, exp) => {
+    // If completed, 0 liability. If pending/partial, add (amount - paidAmount)
+    if (exp.status === "Completed") return sum;
+    const paid = exp.paidAmount || 0;
+    const remaining = exp.amount - paid;
+    return sum + (remaining > 0 ? remaining : 0);
+  }, 0);
 
-  // Loading state
-  if (isLoading) {
-    return (
-      <div className="flex items-center justify-center bg-base-200">
-        <CustomLoader text={"Loading Employee Expenses..."} />
-      </div>
-    );
-  }
-
-  // Error state
-  if (error || !employee) {
-    return (
-      <div className="min-h-screen bg-base-200 p-4 md:p-6">
-        <div className="max-w-2xl mx-auto mt-8 md:mt-12">
-          <div className="alert alert-error shadow-md">
-            <AlertCircle className="w-6 h-6 flex-shrink-0" />
-            <div className="flex-1">
-              <h3 className="font-bold">Error</h3>
-              <div className="text-sm">{error || "Employee not found"}</div>
-            </div>
-            <div className="flex gap-2">
-              <button
-                onClick={() => fetchData()}
-                className="btn btn-sm btn-ghost gap-2"
-              >
-                <RefreshCw className="w-4 h-4" />
-                Retry
-              </button>
-              <button
-                onClick={() => router.back()}
-                className="btn btn-sm btn-ghost gap-2"
-              >
-                <ArrowLeft className="w-4 h-4" />
-                Go Back
-              </button>
-            </div>
-          </div>
-        </div>
-      </div>
-    );
-  }
-
-  const totalExpenses = expenses.reduce((sum, exp) => sum + exp.amount, 0);
+  if (isLoading) return <div className="flex items-center justify-center bg-base-200"><CustomLoader text="Loading..." /></div>;
+  if (error || !employee) return <div className="p-6">Error: {error}</div>;
 
   return (
     <div className="">
-      <div className="w-full ">
-        {/* Modals */}
-        <AddExpenseModal
-          isOpen={isModalOpen}
-          onClose={() => setIsModalOpen(false)}
-          employeeId={employee._id}
-          onSave={handleAddExpense}
-        />
+      <div className="w-full">
+        <AddExpenseModal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} employeeId={employee._id} onSave={handleAddExpense} />
+        <DeleteConfirmationModal isOpen={deleteModal.isOpen} onClose={() => setDeleteModal({ isOpen: false, expenseId: null })} onConfirm={handleConfirmDelete} isDeleting={isDeleting} />
 
-        <DeleteConfirmationModal
-          isOpen={deleteModal.isOpen}
-          onClose={() => setDeleteModal({ isOpen: false, expenseId: null })}
-          onConfirm={handleConfirmDelete}
-          isDeleting={isDeleting}
-        />
-
-         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 mb-4 md:mb-6">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 mb-4 md:mb-6">
+          {/* Card 1: Outstanding Balance */}
           <div className="stats shadow-md bg-base-100">
             <div className="stat py-3">
-              <div className="stat-title text-xs">Total Liability</div>
+              <div className="stat-title text-xs">Total Outstanding</div>
               <div className="stat-value text-xl md:text-2xl text-error">
-                {isRefreshing ? (
-                  <span className="loading loading-dots loading-md"></span>
-                ) : (
-                  currencyFormatter.format(totalExpenses)
-                )}
+                {isRefreshing ? <span className="loading loading-dots loading-md"></span> : currencyFormatter.format(totalLiability)}
               </div>
-              <div className="stat-desc text-xs">Outstanding expenses</div>
+              <div className="stat-desc text-xs">Remaining amount to be deducted</div>
             </div>
           </div>
 
@@ -589,149 +405,132 @@ const EmployeeExpenseDetails = () => {
             <div className="stat py-3">
               <div className="stat-title text-xs">Total Records</div>
               <div className="stat-value text-xl md:text-2xl">
-                {isRefreshing ? (
-                  <span className="loading loading-dots loading-md"></span>
-                ) : (
-                  expenses.length
-                )}
+                {isRefreshing ? <span className="loading loading-dots loading-md"></span> : expenses.length}
               </div>
-              <div className="stat-desc text-xs">Expense entries</div>
+              <div className="stat-desc text-xs">All time entries</div>
             </div>
           </div>
+          
+           <div className="stats shadow-md bg-base-100 sm:col-span-2 lg:col-span-1">
+             <div className="stat py-3">
+               <div className="stat-title text-xs">Total Original Value</div>
+               <div className="stat-value text-xl md:text-2xl">
+                 {isRefreshing ? (
+                   <span className="loading loading-dots loading-md"></span>
+                 ) : (
+                   currencyFormatter.format(expenses.reduce((sum, exp) => sum + exp.amount, 0))
+                 )}
+               </div>
+               <div className="stat-desc text-xs">Sum of all loans/advances</div>
+             </div>
+           </div>
+        </div>
 
-          <div className="stats shadow-md bg-base-100 sm:col-span-2 lg:col-span-1">
-            <div className="stat py-3">
-              <div className="stat-title text-xs">Average Amount</div>
-              <div className="stat-value text-xl md:text-2xl">
-                {isRefreshing ? (
-                  <span className="loading loading-dots loading-md"></span>
-                ) : (
-                  currencyFormatter.format(
-                    expenses.length > 0 ? totalExpenses / expenses.length : 0
-                  )
-                )}
+        {/* Employee Header */}
+        <div className="bg-base-100 shadow-sm rounded-lg p-6 border border-base-200 flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-6">
+          <div className="flex items-center gap-4">
+            <div>
+              <h2 className="text-2xl font-bold">{employee?.name}</h2>
+              <div className="flex flex-wrap gap-x-4 gap-y-1 text-sm opacity-70 mt-1">
+                <span className="flex items-center gap-1"><BriefcaseBusiness size={14}/> {employee?.role || 'N/A'}</span>
+                <span className="flex items-center gap-1"><FileText size={14}/> Iqama: {employee?.iqamaNumber}</span>
               </div>
-              <div className="stat-desc text-xs">Per transaction</div>
             </div>
+          </div>
+          <div className="flex gap-2 w-full md:w-auto">
+            <button onClick={() => router.back()} className="btn btn-outline btn-sm"><ArrowLeft size={16} /> Back</button>
+            <button onClick={() => setIsModalOpen(true)} className={`btn btn-sm text-white border-none bg-[var(--primary-color)] hover:bg-[var(--primary-color)]/90 }`}>
+              <Plus size={16} /> Add Expense
+            </button>
           </div>
         </div>
 
-      
-
-        {/* Employee Identity Card */}
-              <div className="bg-base-100 shadow-sm rounded-lg p-6 border border-base-200 flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-6">
-                <div className="flex items-center gap-4">
-                
-                  <div>
-                    <h2 className="text-2xl font-bold">{employee?.name}</h2>
-                    <div className="flex flex-wrap gap-x-4 gap-y-1 text-sm opacity-70 mt-1">
-                      <span className="flex items-center gap-1"><BriefcaseBusiness size={14}/> {employee?.role || 'N/A'}</span>
-                      <span className="flex items-center gap-1"><FileText size={14}/> Iqama: {employee?.iqamaNumber}</span>
-                    </div>
-                  </div>
-                </div>
-                
-                <div className="flex gap-2 w-full md:w-auto">
-                   <button onClick={() => router.back()} className="btn btn-outline btn-sm">
-                      <ArrowLeft size={16} /> Back
-                   </button>
-                   <button 
-                      onClick={() => setIsModalOpen(true)}
-                      className={`btn btn-sm text-white border-none bg-[var(--primary-color)] hover:bg-[var(--primary-color)]/90 }`}
-                   >
-                      <Plus size={16} /> Add Expense
-                   </button>
-                </div>
-              </div>
-      
-       
-
-        {/* Expense Table */}
-        <div className="card bg-base-100 shadow-md ">
+        {/* --- UPGRADED TABLE --- */}
+        <div className="card bg-base-100 shadow-md">
           <div className="card-body p-3 md:p-4">
             <div className="py-3">
-              <h2 className="text-sm md:text-base font-semibold text-base-content">
-                Expense History
-              </h2>
+              <h2 className="text-sm md:text-base font-semibold text-base-content">Expense & Deduction History</h2>
             </div>
-
-            {isRefreshing && (
-              <div className="flex justify-center py-4">
-                <span
-                  className="loading loading-spinner loading-sm"
-                  style={{ color: "var(--primary-color)" }}
-                ></span>
-              </div>
-            )}
-
+            {isRefreshing && <div className="flex justify-center py-4"><span className="loading loading-spinner loading-sm" style={{ color: "var(--primary-color)" }}></span></div>}
+            
             <div className="overflow-x-auto">
               <table className="table table-xs md:table-sm">
                 <thead>
                   <tr className="border-base-300 bg-base-200">
                     <th className="hidden sm:table-cell text-sm">Date</th>
                     <th className="text-sm">Type</th>
-                    <th className="hidden lg:table-cell text-sm">
-                      Description
-                    </th>
-                    <th className="text-right text-sm">Amount</th>
+                    <th className="text-sm">Status</th>
+                    <th className="hidden lg:table-cell text-sm">Description</th>
+                    <th className="text-right text-sm">Original</th>
+                    <th className="text-right text-sm text-success">Paid</th> {/* New */}
+                    <th className="text-right text-sm text-error">Remaining</th> {/* New */}
                     <th className="text-center text-sm">Action</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {expenses.map((exp) => (
+                  {expenses.map((exp) => {
+                    const paid = exp.paidAmount || 0;
+                    const remaining = exp.amount - paid;
+                    // Determine Status Icon
+                    let StatusIcon = Clock;
+                    if(exp.status === "Completed") StatusIcon = CheckCircle;
+                    else if(exp.status === "Partial") StatusIcon = PieChart;
+
+                    return (
                     <tr key={exp._id} className="hover border-base-300">
                       <td className="hidden sm:table-cell font-medium text-xs">
-                        {new Date(exp.date).toLocaleDateString("en-GB", {
-                          year: "numeric",
-                          month: "short",
-                          day: "numeric",
-                        })}
+                        {new Date(exp.date).toLocaleDateString("en-GB", { year: "numeric", month: "short", day: "numeric" })}
                       </td>
                       <td>
                         <div className="flex flex-col gap-1">
-                          <span
-                            className={`badge badge-sm ${getExpenseBadgeClass(
-                              exp.type
-                            )}`}
-                          >
-                            {exp.type}
-                          </span>
+                          <span className={`badge badge-sm ${getExpenseBadgeClass(exp.type)}`}>{exp.type}</span>
                           <span className="text-xs text-base-content/60 sm:hidden">
-                            {new Date(exp.date).toLocaleDateString("en-GB", {
-                              month: "short",
-                              day: "numeric",
-                            })}
+                            {new Date(exp.date).toLocaleDateString("en-GB", { month: "short", day: "numeric" })}
                           </span>
                         </div>
                       </td>
-                      <td className="hidden lg:table-cell text-base-content/80 text-sm">
+                      
+                      <td>
+                        <span className={`badge badge-sm gap-1 ${getStatusBadge(exp.status || "Pending")}`}>
+                            <StatusIcon size={10} />
+                            {exp.status || "Pending"}
+                        </span>
+                      </td>
+
+                      <td className="hidden lg:table-cell text-base-content/80 text-sm truncate max-w-xs" title={exp.description}>
                         {exp.description}
                       </td>
+                      
+                      {/* AMOUNT COLUMNS */}
                       <td className="font-semibold text-right text-sm">
                         {currencyFormatter.format(exp.amount)}
                       </td>
+                      <td className="text-right text-sm text-success/80">
+                         {paid > 0 ? currencyFormatter.format(paid) : "-"}
+                      </td>
+                      <td className="font-bold text-right text-sm text-error">
+                         {remaining > 0 ? currencyFormatter.format(remaining) : "0.00"}
+                      </td>
+
                       <td className="text-center">
                         <button
                           onClick={() => handleDeleteClick(exp._id)}
-                          disabled={isDeleting}
-                          className="btn btn-ghost btn-sm text-error hover:bg-error/10"
-                          title="Delete expense"
+                          // Disable delete if any amount has been paid (to prevent data mess)
+                          disabled={isDeleting || (exp.paidAmount > 0)} 
+                          className={`btn btn-ghost btn-sm text-error hover:bg-error/10 ${(exp.paidAmount > 0) ? "opacity-20 cursor-not-allowed" : ""}`}
+                          title={(exp.paidAmount > 0) ? "Cannot delete: Partial payment made" : "Delete expense"}
                         >
                           <Trash2 className="w-3 h-3" />
                         </button>
                       </td>
                     </tr>
-                  ))}
+                  )})}
+                  
                   {expenses.length === 0 && !isRefreshing && (
                     <tr>
-                      <td colSpan={5} className="text-center py-6 md:py-8">
-                        <div className="flex flex-col items-center gap-1">
-                          <p className="text-base-content/60 font-medium text-xs">
-                            No expense records found
-                          </p>
-                          <p className="text-xs text-base-content/40">
-                            Click <bold>Add Expense</bold> to create your first entry
-                          </p>
+                      <td colSpan={8} className="text-center py-8">
+                        <div className="flex flex-col items-center gap-1 opacity-60">
+                          <p className="text-sm font-medium">No records found</p>
                         </div>
                       </td>
                     </tr>

@@ -2,91 +2,62 @@
 
 import mongoose from 'mongoose';
 
-const ExpenseSchema = new mongoose.Schema({
-  description: {
-    type: String,
-    required: true,
-    trim: true,
+// 1. Schema for Manual Ad-hoc expenses (typed manually)
+const ManualExpenseSchema = new mongoose.Schema({
+  description: { type: String, required: true, trim: true },
+  amount: { type: Number, required: true, default: 0, min: 0 }
+}, { _id: false });
+
+// 2. Schema for Linking DB Loans (The new feature)
+const LinkedExpenseSchema = new mongoose.Schema({
+  expenseId: { 
+    type: mongoose.Schema.Types.ObjectId, 
+    ref: 'Expense', // Links to your Expense Model
+    required: true 
   },
-  amount: {
-    type: Number,
-    required: true,
-    default: 0,
-    min: 0,
-  }
-}, { _id: false }); // Do not create separate IDs for subdocuments
+  amount: { type: Number, required: true, min: 0 } // Amount deducted from this specific loan
+}, { _id: false });
 
 const EmployeeSalarySchema = new mongoose.Schema({
   // --- Core Reference ---
   employeeId: {
     type: mongoose.Schema.Types.ObjectId,
-    ref: 'Employee', // Assuming you have an Employee model
+    ref: 'Employee',
     required: true,
   },
   
   // --- Period Details ---
-  fromDate: {
-    type: Date,
-    required: true,
-  },
-  toDate: {
-    type: Date,
-    required: true,
-  },
-  // Note: monthReference in frontend is UI-only, month can be derived or stored
-  month: { // For easy filtering/display, derived from fromDate/toDate
-    type: String, // e.g., '2023-11'
-    required: false,
-  },
+  fromDate: { type: Date, required: true },
+  toDate: { type: Date, required: true },
+  month: { type: String, required: false },
 
-  // --- Calculation Inputs ---
-  baseSalary: {
-    type: Number,
-    required: true,
-    min: 0,
-  },
-  absentDays: {
-    type: Number,
-    required: true,
-    default: 0,
-    min: 0,
-  },
-  allowances: { // Bonuses/Overtime
-    type: Number,
-    required: true,
-    default: 0,
-    min: 0,
-  },
-  deductions: { // Other deductions (non-expense, non-absent)
-    type: Number,
-    required: true,
-    default: 0,
-    min: 0,
-  },
-  expenses: [ExpenseSchema], // Detailed loan/expense items
-  notes: {
-    type: String,
-    trim: true,
-  },
+  // --- Earnings ---
+  baseSalary: { type: Number, required: true, min: 0 },
+  allowances: { type: Number, required: true, default: 0, min: 0 },
 
-  // --- Calculated Outputs (Can be recalculated if needed, but stored for history) ---
-  absentDeduction: { // dailyRate * absentDays
-    type: Number,
-    required: true,
-  },
-  expensesTotal: { // Sum of expenses[].amount
-    type: Number,
-    required: true,
-  },
-  totalDeductions: { // absentDeduction + expensesTotal + deductions
-    type: Number,
-    required: true,
-  },
-  netSalary: {
-    type: Number,
-    required: true,
-    min: 0,
-  },
+  // --- Deductions Inputs ---
+  absentDays: { type: Number, required: true, default: 0, min: 0 },
+  deductions: { type: Number, required: true, default: 0, min: 0 }, // Other fixed deductions
+  
+  // *** UPDATED: Renamed to match frontend "manualExpenses" ***
+  manualExpenses: [ManualExpenseSchema], 
+  
+  // *** NEW: Store the IDs of the loans paid off ***
+  linkedExpenses: [LinkedExpenseSchema], 
+  
+  notes: { type: String, trim: true },
+
+  // --- Calculated Outputs (Snapshot for History) ---
+  absentDeduction: { type: Number, required: true, default: 0 },
+  
+  // *** UPDATED: Snapshot of totals ***
+  manualExpensesTotal: { type: Number, required: true, default: 0 },
+  
+  // *** NEW: Snapshot of total DB loans deducted ***
+  dbExpensesTotal: { type: Number, required: true, default: 0 },
+
+  totalDeductions: { type: Number, required: true }, // Sum of all deduction types
+  netSalary: { type: Number, required: true, min: 0 },
 
   // --- Status & Payment ---
   status: {
@@ -97,7 +68,7 @@ const EmployeeSalarySchema = new mongoose.Schema({
   },
   paidDate: {
     type: Date,
-    required: function() { return this.status === 'Paid'; }, // Required only if status is Paid
+    required: function() { return this.status === 'Paid'; },
     default: null,
   }
 

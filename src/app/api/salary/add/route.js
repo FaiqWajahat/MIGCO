@@ -1,117 +1,97 @@
-
-
 import { NextResponse } from 'next/server';
 import connectDB from '@/lib/mongodb';
 import calculateSalaryPeriodMonth from '@/lib/utils'; 
 import EmployeeSalary from '@/models/employeeSalary';
+import employeeExpense from '@/models/employeeExpenses'; 
 
-/**
- * Handles POST requests to add a new salary record.
- * Endpoint: /api/salary/add
- */
 export async function POST(request) {
   try {
-    // 1. Establish Database Connection
     await connectDB();
-
-    // 2. Extract Data
     const body = await request.json();
     
     const { 
-      employeeId, 
-      fromDate, 
-      toDate, 
-      baseSalary, 
-      absentDays, 
-      allowances, 
-      deductions, 
-      expenses, 
-      notes, 
-      status,
-      absentDeduction,
-      expensesTotal,
-      totalDeductions,
-      netSalary,
-      paidDate 
+      employeeId, fromDate, toDate, baseSalary, absentDays, allowances, deductions, 
+      manualExpenses, linkedExpenses, notes, status, 
+      absentDeduction, manualExpensesTotal, dbExpensesTotal, totalDeductions, netSalary, paidDate 
     } = body;
 
-    // 3. Basic Input Validation
+    // 1. Validation
     if (!employeeId || !fromDate || !toDate || netSalary === undefined) {
-      return NextResponse.json(
-        { success: false, message: 'Missing required salary fields.' },
-        { status: 400 }
-      );
+      return NextResponse.json({ success: false, message: 'Missing fields.' }, { status: 400 });
     }
 
-    // ---------------------------------------------------------
-    // 4. CHECK FOR EXISTING RECORDS (Date Range Overlap Check)
-    // ---------------------------------------------------------
-    
-    // Convert strings to Date objects for accurate comparison
-    const newStart = new Date(fromDate);
-    const newEnd = new Date(toDate);
-
-    // Logic: An overlap occurs if (ExistingStart <= NewEnd) AND (ExistingEnd >= NewStart)
+    // 2. Conflict Check
     const existingRecord = await EmployeeSalary.findOne({
-      employeeId: employeeId,
-      $and: [
-        { fromDate: { $lte: newEnd } },  // Existing starts before (or on) new end
-        { toDate: { $gte: newStart } }   // Existing ends after (or on) new start
-      ]
+      employeeId,
+      $and: [{ fromDate: { $lte: new Date(toDate) } }, { toDate: { $gte: new Date(fromDate) } }]
     });
 
     if (existingRecord) {
-      const existingStart = new Date(existingRecord.fromDate).toLocaleDateString();
-      const existingEnd = new Date(existingRecord.toDate).toLocaleDateString();
-      
-      return NextResponse.json(
-        { 
-          success: false, 
-          message: `Conflict: A salary record already exists for the period ${existingStart} to ${existingEnd}.` 
-        },
-        { status: 409 }
-      );
+      return NextResponse.json({ success: false, message: 'Salary of this month already added.' }, { status: 409 });
     }
-    // ---------------------------------------------------------
 
-    // 5. Calculate Month Reference
-    const monthReference = calculateSalaryPeriodMonth(fromDate, toDate); 
-
-    // 6. Create Database Record
+    // 3. Create Salary Record
     const newRecord = await EmployeeSalary.create({
-      employeeId,
-      fromDate,
-      toDate,
-      month: monthReference,
-      baseSalary,
-      absentDays,
-      allowances,
-      deductions,
-      expenses,
-      notes,
-      status,
-      absentDeduction,
-      expensesTotal,
-      totalDeductions,
-      netSalary,
-      paidDate: status === 'Paid' ? new Date(paidDate) : null,
+      employeeId, fromDate, toDate,
+      month: calculateSalaryPeriodMonth(fromDate, toDate),
+      baseSalary, absentDays, allowances, deductions,
+      manualExpenses: manualExpenses || [],
+      linkedExpenses: linkedExpenses || [],
+      notes, status,
+      absentDeduction, 
+      manualExpensesTotal: manualExpensesTotal || 0,
+      dbExpensesTotal: dbExpensesTotal || 0,
+      totalDeductions, netSalary,
+      paidDate: status === 'Paid' ? (paidDate ? new Date(paidDate) : new Date()) : null,
     });
 
-    // 7. Return Success Response
-    return NextResponse.json(
-      { 
-        success: true, 
-        message: status === 'Paid' ? 'Salary paid and recorded' : 'Salary draft saved', 
-        data: newRecord 
-      },
-      { status: 201 } 
-    );
+    // ---------------------------------------------------------
+    // 4. ROBUST EXPENSE UPDATE (PARALLEL EXECUTION)
+    // ---------------------------------------------------------
+    if (status === 'Paid' && linkedExpenses?.length > 0) {
+      console.log(`Processing ${linkedExpenses.length} expense updates...`);
+
+      // We use Promise.all to run all updates at the same time. 
+      // This is much faster and safer than a standard for-loop.
+      await Promise.all(linkedExpenses.map(async (link) => {
+        try {
+          const { expenseId, amount } = link;
+          const deductionAmount = parseFloat(amount);
+
+          if (!deductionAmount || deductionAmount <= 0) return;
+
+          const expenseDoc = await employeeExpense.findById(expenseId);
+          
+          if (expenseDoc) {
+            // A. Update Paid Amount
+            const currentPaid = expenseDoc.paidAmount || 0;
+            const newPaidTotal = currentPaid + deductionAmount;
+            
+            // B. Fix Floating Point Math (Round to 2 decimals)
+            // This prevents errors where 99.99999 is considered less than 100
+            expenseDoc.paidAmount = Math.round(newPaidTotal * 100) / 100;
+
+            // C. Update Status
+            if (expenseDoc.paidAmount >= expenseDoc.amount) {
+              expenseDoc.status = 'Completed';
+            } else {
+              expenseDoc.status = 'Partial';
+            }
+
+            await expenseDoc.save();
+            console.log(`Updated Expense ${expenseId}: Paid ${deductionAmount}, New Status: ${expenseDoc.status}`);
+          }
+        } catch (innerError) {
+          // Log specific error but don't crash the whole request
+          console.error(`Failed to update expense ${link.expenseId}:`, innerError);
+        }
+      }));
+    }
+
+    return NextResponse.json({ success: true, message: 'Salary saved successfully', data: newRecord }, { status: 201 });
 
   } catch (error) {
     console.error("Salary Add Error:", error);
-    return NextResponse.json(
-      { success: false, message: 'Failed to create salary record.', error: error.message },
-      { status: 500 }
-    );
+    return NextResponse.json({ success: false, message: error.message }, { status: 500 });
   }
 }

@@ -5,7 +5,7 @@ import { useParams, useRouter } from 'next/navigation';
 import { 
   Download, Plus, X, Save, Calculator, DollarSign, 
   Calendar, Trash2, ArrowLeft, Briefcase, 
-  AlertCircle, CheckCircle2, FileText
+  AlertCircle, CheckCircle2, FileText, Receipt
 } from 'lucide-react';
 import DashboardPageHeader from "@/Components/DashboardPageHeader";
 import CustomDropdown from "@/Components/CustomDropdown";
@@ -26,7 +26,11 @@ export default function EmployeeSalaryPage() {
   
   const [employee, setEmployee] = useState(null);
   const [salaryRecords, setSalaryRecords] = useState([]);
+  const [pendingExpenses, setPendingExpenses] = useState([]); 
   
+  // Stores { "expenseId": amountToDeduct }
+  const [expenseAllocations, setExpenseAllocations] = useState({}); 
+
   // UI States
   const [showCalculator, setShowCalculator] = useState(false);
   const [selectedStatus, setSelectedStatus] = useState('All');
@@ -40,29 +44,27 @@ export default function EmployeeSalaryPage() {
     toDate: '',
     baseSalary: '',
     absentDays: '0',
-    expenses: [], 
+    manualExpenses: [], // Ad-hoc expenses not in DB
     deductions: '0', 
     allowances: '0', 
     notes: '',
     status: "Pending",
-    employeeId: '' // Initialize as empty, filled via useEffect
+    employeeId: '' 
   });
 
   const [calculatedData, setCalculatedData] = useState(null);
 
   // --- API Functions ---
 
-  // Defined with useCallback to prevent infinite loops in dependency arrays
   const fetchEmployeeData = useCallback(async () => {
     try {
       const response = await axios.get(`/api/employee/getEmployee/${employeeId}`);
-      if (!response.data.success) {
-        throw new Error(response.data.message);
-      }
+      if (!response.data.success) throw new Error(response.data.message);
+      
       const emp = response.data.employee;
       setEmployee(emp);
       
-      // Initialize form with employee ID immediately upon fetch
+      // Initialize form with employee ID
       setFormData(prev => ({ 
         ...prev, 
         baseSalary: emp.salary, 
@@ -73,6 +75,27 @@ export default function EmployeeSalaryPage() {
       router.push("/Dashboard/Employees");
     }
   }, [employeeId, router]);
+
+  const fetchPendingExpenses = useCallback(async () => {
+    try {
+      const response = await axios.get(`/api/employee/expenses?employeeId=${employeeId}&limit=100`);
+      if (response.data.success) {
+        // Filter: Get expenses that are NOT fully paid (Completed) and NOT already deducted
+        const activeExpenses = response.data.data.expenses.filter(e => e.status !== 'Completed' && e.status !== 'Deducted');
+        setPendingExpenses(activeExpenses);
+
+        // Initialize allocations: Default to deducting the FULL remaining amount
+        const initialAllocations = {};
+        activeExpenses.forEach(exp => {
+            const remaining = exp.amount - (exp.paidAmount || 0);
+            initialAllocations[exp._id] = remaining; 
+        });
+        setExpenseAllocations(initialAllocations);
+      }
+    } catch (error) {
+      console.error("Error fetching expenses", error);
+    }
+  }, [employeeId]);
 
   const fetchSalaryRecords = useCallback(async () => {
     try {
@@ -89,10 +112,10 @@ export default function EmployeeSalaryPage() {
   useEffect(() => {
     if (employeeId) {
       setLoading(true);
-      Promise.all([fetchEmployeeData(), fetchSalaryRecords()])
+      Promise.all([fetchEmployeeData(), fetchSalaryRecords(), fetchPendingExpenses()])
         .finally(() => setLoading(false));
     }
-  }, [employeeId, fetchEmployeeData, fetchSalaryRecords]);
+  }, [employeeId, fetchEmployeeData, fetchSalaryRecords, fetchPendingExpenses]);
 
   // --- Logic & Calculations ---
 
@@ -101,7 +124,6 @@ export default function EmployeeSalaryPage() {
     const year = date.getFullYear();
     const month = date.getMonth();
     
-    // Create dates in local time
     const firstDay = new Date(year, month, 1);
     const lastDay = new Date(year, month + 1, 0);
 
@@ -120,8 +142,23 @@ export default function EmployeeSalaryPage() {
     }));
   };
 
+  // Handle manual input change in the DB Expenses table
+  const handleAllocationChange = (expenseId, value, maxAmount) => {
+    let numValue = parseFloat(value);
+    if (isNaN(numValue)) numValue = 0;
+    
+    // Validation: Don't allow deducting more than is owed
+    if (numValue > maxAmount) numValue = maxAmount;
+    if (numValue < 0) numValue = 0;
+
+    setExpenseAllocations(prev => ({
+        ...prev,
+        [expenseId]: numValue
+    }));
+  };
+
   const handleCalculate = useCallback(() => {
-    const { fromDate, toDate, baseSalary, absentDays, expenses, deductions, allowances } = formData;
+    const { fromDate, toDate, baseSalary, absentDays, manualExpenses, deductions, allowances } = formData;
     
     if (!fromDate || !toDate) return;
 
@@ -130,52 +167,74 @@ export default function EmployeeSalaryPage() {
     const extraDeduct = parseFloat(deductions) || 0;
     const extraAllow = parseFloat(allowances) || 0;
 
+    // 1. Absent Deduction
     const dailyRate = base / 30; 
     const absentDeduction = dailyRate * absent;
     
-    const expensesTotal = expenses.reduce((sum, exp) => sum + (parseFloat(exp.amount) || 0), 0);
-    const totalDeductions = absentDeduction + expensesTotal + extraDeduct;
+    // 2. Manual Ad-hoc Expenses
+    const manualExpensesTotal = manualExpenses.reduce((sum, exp) => sum + (parseFloat(exp.amount) || 0), 0);
+
+    // 3. Database Expenses (Sum of user inputs in allocations)
+    const dbExpensesTotal = Object.values(expenseAllocations).reduce((sum, val) => sum + val, 0);
+
+    // 4. Total Deductions
+    const totalDeductions = absentDeduction + manualExpensesTotal + dbExpensesTotal + extraDeduct;
     
+    // 5. Net Salary
     const netSalary = (base + extraAllow) - totalDeductions;
+
+    // 6. Prepare Payload for Backend
+    // Only send expenses that have an amount > 0 allocated
+    const linkedExpensesPayload = Object.entries(expenseAllocations)
+        .filter(([_, amount]) => amount > 0)
+        .map(([id, amount]) => ({ expenseId: id, amount: amount }));
 
     setCalculatedData({
       ...formData,
       baseSalary: base,
       absentDays: absent,
       absentDeduction,
-      expensesTotal,
+      manualExpensesTotal,
+      dbExpensesTotal,
       extraDeductions: extraDeduct,
       extraAllowances: extraAllow,
       totalDeductions,
-      netSalary: Math.max(0, netSalary)
+      netSalary: Math.max(0, netSalary),
+      linkedExpenses: linkedExpensesPayload 
     });
-  }, [formData]);
+  }, [formData, expenseAllocations]);
 
   // Auto-calculate trigger
   useEffect(() => {
     if(formData.fromDate && formData.toDate) {
       handleCalculate();
     }
-  }, [handleCalculate, formData.fromDate, formData.toDate]); // Dependencies simplified as handleCalculate depends on formData
-
+  }, [handleCalculate, formData.fromDate, formData.toDate, expenseAllocations]);
 
   // --- Database Actions ---
 
-  // *** CRITICAL FIX: Reset Form with Employee ID preserved ***
   const resetForm = () => {
     setFormData({
       monthReference: '',
       fromDate: '',
       toDate: '',
       baseSalary: employee?.salary || '', 
-      employeeId: employee?._id || employeeId, // ENSURE ID IS KEPT
+      employeeId: employee?._id || employeeId, 
       absentDays: '0',
-      expenses: [],
+      manualExpenses: [],
       deductions: '0',
       allowances: '0',
       notes: '',
       status: "Pending"
     });
+    
+    // Re-initialize allocations from pendingExpenses
+    const initialAllocations = {};
+    pendingExpenses.forEach(exp => {
+        initialAllocations[exp._id] = exp.amount - (exp.paidAmount || 0);
+    });
+    setExpenseAllocations(initialAllocations);
+
     setCalculatedData(null);
     setShowCalculator(false);
   };
@@ -186,12 +245,13 @@ export default function EmployeeSalaryPage() {
       return;
     }
 
-    // Safety check: Ensure employeeId is present in the payload
     const finalPayload = { 
         ...calculatedData, 
         employeeId: calculatedData.employeeId || employee?._id || employeeId,
         status, 
-        paidDate: status === 'Paid' ? new Date() : null 
+        paidDate: status === 'Paid' ? new Date() : null,
+        // Backend must accept 'linkedExpenses' as [{ expenseId, amount }]
+        linkedExpenses: calculatedData.linkedExpenses 
     };
 
     try {
@@ -203,11 +263,15 @@ export default function EmployeeSalaryPage() {
         throw new Error(response.data.message);
       }
 
-      successToast(status === 'Paid' ? "Salary processed & paid successfully" : "Draft saved successfully");
+      successToast(status === 'Paid' ? "Salary processed & expenses updated" : "Draft saved successfully");
 
       setSalaryRecords(prev => [response.data.data, ...prev]);
+      
+      // If Paid, refresh pending expenses (as amounts/statuses changed)
+      if (status === 'Paid') {
+         fetchPendingExpenses();
+      }
 
-      // Successfully saved, now reset for next entry
       resetForm();
       
     } catch (error) {
@@ -239,6 +303,9 @@ export default function EmployeeSalaryPage() {
           ? { ...r, status: 'Paid', paidDate: new Date().toISOString() } 
           : r
       ));
+      
+      // Refresh pending expenses
+      fetchPendingExpenses();
 
     } catch (error) {
       console.error(error);
@@ -267,23 +334,23 @@ export default function EmployeeSalaryPage() {
 
   // --- Form Handlers ---
 
-  const handleExpenseChange = (index, field, value) => {
-    const newExpenses = [...formData.expenses];
+  const handleManualExpenseChange = (index, field, value) => {
+    const newExpenses = [...formData.manualExpenses];
     newExpenses[index][field] = value;
-    setFormData(prev => ({ ...prev, expenses: newExpenses }));
+    setFormData(prev => ({ ...prev, manualExpenses: newExpenses }));
   };
 
   const addExpenseRow = () => {
     setFormData(prev => ({
       ...prev,
-      expenses: [...prev.expenses, { description: '', amount: '' }]
+      manualExpenses: [...prev.manualExpenses, { description: '', amount: '' }]
     }));
   };
 
   const removeExpenseRow = (index) => {
     setFormData(prev => ({
       ...prev,
-      expenses: prev.expenses.filter((_, i) => i !== index)
+      manualExpenses: prev.manualExpenses.filter((_, i) => i !== index)
     }));
   };
 
@@ -297,36 +364,32 @@ export default function EmployeeSalaryPage() {
   };
 
   // --- CSV Export ---
-  const downloadCSV = (data, filename) => {
-    const csvContent = "data:text/csv;charset=utf-8," + data.map(e => e.join(",")).join("\n");
-    const encodedUri = encodeURI(csvContent);
-    const link = document.createElement("a");
-    link.setAttribute("href", encodedUri);
-    link.setAttribute("download", filename);
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-  };
-
   const handleExportSingle = (record) => {
     const rows = [
       ['SALARY SLIP', 'MIGCO.'],
       ['Employee', employee?.name],
       ['Period', `${formatDate(record.fromDate)} - ${formatDate(record.toDate)}`],
-      ['Paid On', record.paidDate ? formatDate(record.paidDate) : 'N/A'],
       ['Status', record.status],
       [],
       ['DESCRIPTION', 'AMOUNT'],
       ['Base Salary', record.baseSalary],
       ['Allowances', record.allowances],
       ['Absence Deduction', `-${record.absentDeduction || 0}`],
+      ['DB Expenses', `-${record.dbExpensesTotal || 0}`],
       ['Other Deductions', `-${record.deductions || 0}`],
-      ...(record.expenses || []).map(e => [e.description, `-${e.amount}`]),
+      ...(record.manualExpenses || []).map(e => [e.description, `-${e.amount}`]),
       [],
       ['NET SALARY', record.netSalary],
-      ['Notes', record.notes || 'N/A']
     ];
-    downloadCSV(rows, `Salary_${employee?.name}_${record.month}.csv`);
+    
+    const csvContent = "data:text/csv;charset=utf-8," + rows.map(e => e.join(",")).join("\n");
+    const encodedUri = encodeURI(csvContent);
+    const link = document.createElement("a");
+    link.setAttribute("href", encodedUri);
+    link.setAttribute("download", `Salary_${employee?.name}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
   };
 
   const filteredRecords = useMemo(() => {
@@ -385,31 +448,31 @@ export default function EmployeeSalaryPage() {
 
             <div className="stats shadow bg-base-100">
             <div className="stat">
-                <div className="stat-title text-xs">Salary</div>
+                <div className="stat-title text-xs">Salary Records</div>
                 <div className="stat-value text-2xl ">
                 {salaryRecords.length}
                 </div>
-                <div className="stat-desc ">Salary record</div>
             </div>
             </div>
 
             <div className="stats shadow bg-base-100">
             <div className="stat">
-                <div className="stat-title text-xs">Paid</div>
+                <div className="stat-title text-xs">Pending Liabilities</div>
+                <div className="stat-value text-2xl text-error">
+                {/* Sum of remaining balances */}
+                {formatCurrency(pendingExpenses.reduce((sum, e) => sum + (e.amount - (e.paidAmount||0)), 0))}
+                </div>
+                <div className="stat-desc ">Total DB Expenses</div>
+            </div>
+            </div>
+
+            <div className="stats shadow bg-base-100">
+            <div className="stat">
+                <div className="stat-title text-xs">Paid Salary</div>
                 <div className="stat-value text-2xl text-success">
                 {formatCurrency(salaryRecords.filter(r => r.status === 'Paid').reduce((a, b) => a + (b.netSalary || 0), 0))}
                 </div>
-                <div className="stat-desc ">Total Paid</div>
-            </div>
-            </div>
-
-            <div className="stats shadow bg-base-100">
-            <div className="stat">
-                <div className="stat-title text-xs">Remaining</div>
-                <div className="stat-value text-2xl text-warning">
-                {formatCurrency(salaryRecords.filter(r => r.status !== 'Paid').reduce((a, b) => a + (b.netSalary || 0), 0))}
-                </div>
-                <div className="stat-desc ">Total Remaining </div>
+                <div className="stat-desc ">Total Disbursed</div>
             </div>
             </div>
         </div>
@@ -503,22 +566,80 @@ export default function EmployeeSalaryPage() {
                     </div>
                   </div>
 
-                  {/* 4. Expenses Dynamic List */}
+                  {/* 4. DB EXPENSES TABLE - With Manual Inputs */}
+                  <div className="bg-base-100 border border-base-200 rounded-lg p-4">
+                    <h4 className="font-semibold text-sm mb-2 flex items-center gap-2">
+                        <Receipt size={16} className="text-warning"/> Pending Liabilities (Database)
+                    </h4>
+                    {pendingExpenses.length === 0 ? (
+                         <p className="text-xs opacity-50 italic">No pending expenses found for this employee.</p>
+                    ) : (
+                        <div className="overflow-x-auto">
+                            <table className="table table-xs">
+                                <thead>
+                                    <tr>
+                                        <th>Date</th>
+                                        <th>Description</th>
+                                        <th className="text-right">Total Owed</th>
+                                        <th className="text-right w-32">Deduct Now</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {pendingExpenses.map(exp => {
+                                        const paid = exp.paidAmount || 0;
+                                        const remaining = exp.amount - paid;
+                                        return (
+                                            <tr key={exp._id}>
+                                                <td className="w-24">{new Date(exp.date).toLocaleDateString()}</td>
+                                                <td>
+                                                    <div className="font-medium">{exp.type}</div>
+                                                    <div className="text-[10px] opacity-60 truncate max-w-[150px]">{exp.description}</div>
+                                                </td>
+                                                <td className="text-right opacity-60 font-medium">
+                                                    {formatCurrency(remaining)}
+                                                </td>
+                                                <td className="text-right">
+                                                    {/* INPUT FIELD FOR MANUAL ALLOCATION */}
+                                                    <input 
+                                                        type="number" 
+                                                        className="input input-xs input-bordered w-full text-right font-bold text-error"
+                                                        value={expenseAllocations[exp._id] ?? remaining}
+                                                        onChange={(e) => handleAllocationChange(exp._id, e.target.value, remaining)}
+                                                        min="0"
+                                                        max={remaining}
+                                                    />
+                                                </td>
+                                            </tr>
+                                        )
+                                    })}
+                                    <tr className="bg-base-200 font-bold">
+                                        <td colSpan={3} className="text-right">Total Deducting:</td>
+                                        <td className="text-right text-error">
+                                            {formatCurrency(Object.values(expenseAllocations).reduce((sum, val) => sum + val, 0))}
+                                        </td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    )}
+                  </div>
+
+                  {/* 5. Manual Extras */}
                   <div>
                     <div className="flex justify-between items-center mb-2">
-                      <label className="text-sm font-semibold">Expenses & Loans</label>
+                      <label className="text-sm font-semibold">Ad-hoc Deductions (Manual)</label>
                       <button onClick={addExpenseRow} className="btn btn-xs btn-outline border-dashed">
                         <Plus size={14}/> Add Item
                       </button>
                     </div>
-                    {formData.expenses.length === 0 && <p className="text-xs opacity-50 italic">No additional expenses added.</p>}
+                    {formData.manualExpenses.length === 0 && <p className="text-xs opacity-50 italic">No additional manual items.</p>}
                     <div className="space-y-2">
-                      {formData.expenses.map((exp, idx) => (
+                      {formData.manualExpenses.map((exp, idx) => (
                         <div key={idx} className="flex gap-2">
-                          <input type="text" placeholder="Description (e.g., Food Advance)" className="input input-sm input-bordered flex-1"
-                            value={exp.description} onChange={e => handleExpenseChange(idx, 'description', e.target.value)} />
+                          <input type="text" placeholder="Description" className="input input-sm input-bordered flex-1"
+                            value={exp.description} onChange={e => handleManualExpenseChange(idx, 'description', e.target.value)} />
                           <input type="number" placeholder="Amount" className="input input-sm input-bordered w-32"
-                            value={exp.amount} onChange={e => handleExpenseChange(idx, 'amount', e.target.value)} />
+                            value={exp.amount} onChange={e => handleManualExpenseChange(idx, 'amount', e.target.value)} />
                           <button onClick={() => removeExpenseRow(idx)} className="btn btn-sm btn-square btn-ghost text-error"><Trash2 size={16}/></button>
                         </div>
                       ))}
@@ -540,7 +661,8 @@ export default function EmployeeSalaryPage() {
                         <SummaryRow label="Allowances" amount={calculatedData.extraAllowances} isAdd />
                         <div className="divider my-1"></div>
                         <SummaryRow label={`Absence (${formData.absentDays} days)`} amount={-calculatedData.absentDeduction} isDeduct />
-                        <SummaryRow label="Expenses Total" amount={-calculatedData.expensesTotal} isDeduct />
+                        <SummaryRow label="DB Expenses" amount={-calculatedData.dbExpensesTotal} isDeduct />
+                        <SummaryRow label="Manual Expenses" amount={-calculatedData.manualExpensesTotal} isDeduct />
                         <SummaryRow label="Other Deductions" amount={-calculatedData.extraDeductions} isDeduct />
                         
                         <div className="bg-base-100 p-4 rounded-lg mt-4 border border-base-300">
@@ -626,7 +748,7 @@ export default function EmployeeSalaryPage() {
                         {formatCurrency(record.baseSalary + record.allowances)}
                       </td>
                       <td className="text-right font-medium text-error">
-                        {formatCurrency(record.totalDeductions || (record.deductions + (record.expenses?.reduce((a,b)=>a+b.amount,0)||0)))}
+                        {formatCurrency(record.totalDeductions || (record.deductions + (record.dbExpensesTotal||0)))}
                       </td>
                       <td className="text-right">
                         <div className="font-bold text-[var(--primary-color)]">{formatCurrency(record.netSalary)}</div>

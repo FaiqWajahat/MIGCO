@@ -32,11 +32,12 @@ const ExpenseSchema = new mongoose.Schema(
       trim: true,
       maxlength: 500,
     },
-    status: {
-      type: String,
-      enum: ["Pending", "Approved", "Paid"],
-      default: "Pending",
-    },
+    paidAmount: { type: Number, default: 0 },
+   status: {
+    type: String,
+    enum: ["Pending", "Partial", "Completed"], 
+    default: "Pending", 
+  },
   },
   {
     timestamps: true,
