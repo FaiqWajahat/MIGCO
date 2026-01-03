@@ -7,10 +7,16 @@ import { useRouter } from "next/navigation";
 
 const AddEmployee = () => {
   const route = useRouter();
+  
+  // --- EXISTING DROPDOWN STATES ---
   const [isNationalityOpen, setIsNationalityOpen] = useState(false);
   const [selectedNationality, setSelectedNationality] = useState("");
   const [isStatusOpen, setIsStatusOpen] = useState(false);
   const [selectedStatus, setSelectedStatus] = useState("Active");
+
+  // --- NEW ROLE DROPDOWN STATE ---
+  const [isRoleOpen, setIsRoleOpen] = useState(false);
+
   const [formData, setFormData] = useState({
     name: "",
     iqamaNumber: "",
@@ -21,6 +27,7 @@ const AddEmployee = () => {
     salary: "000",
     status: true
   });
+  
   const [errors, setErrors] = useState({});
   const [isLoading, setIsLoading] = useState(false);
 
@@ -29,6 +36,14 @@ const AddEmployee = () => {
     "Bangali",
     "Saudi",
     "Indian",
+    "Other"
+  ];
+
+  // --- NEW ROLES ARRAY ---
+  const roles = [
+    "Foreman",
+    "Engineer",
+    "Labour",
     "Other"
   ];
 
@@ -43,7 +58,6 @@ const AddEmployee = () => {
       ...prev,
       [name]: value
     }));
-    // Clear error for this field when user starts typing
     if (errors[name]) {
       setErrors(prev => ({
         ...prev,
@@ -52,27 +66,40 @@ const AddEmployee = () => {
     }
   };
 
+  // --- NEW ROLE SELECTION HANDLER ---
+  const handleRoleSelect = (roleValue) => {
+    setFormData(prev => ({
+      ...prev,
+      role: roleValue
+    }));
+    setIsRoleOpen(false);
+    
+    // Clear error if exists
+    if (errors.role) {
+      setErrors(prev => ({
+        ...prev,
+        role: ""
+      }));
+    }
+  };
+
   const validateForm = () => {
     const newErrors = {};
 
-    // Name validation - required
     if (!formData.name.trim()) {
       newErrors.name = "Full name is required";
     }
 
-    // Iqama Number validation - required and must be exactly 10 digits
     if (!formData.iqamaNumber.trim()) {
       newErrors.iqamaNumber = "Iqama number is required";
     } else if (!/^\d{10}$/.test(formData.iqamaNumber.trim())) {
       newErrors.iqamaNumber = "Iqama number must be exactly 10 digits";
     }
 
-    // Nationality validation - required
     if (!formData.nationality) {
       newErrors.nationality = "Nationality is required";
     }
 
-    // Role validation - required
     if (!formData.role.trim()) {
       newErrors.role = "Role/Position is required";
     }
@@ -102,26 +129,20 @@ const AddEmployee = () => {
   const handleSubmit = async (e) => {
     e.preventDefault();
 
-    // Validate form
     if (!validateForm()) {
       return;
     }
 
     setIsLoading(true);
 
-    // --- EDITED SECTION START ---
-    // Calculate today's date in YYYY-MM-DD format
     const today = new Date().toISOString().split('T')[0];
 
-    // Create a payload object. Use existing joiningDate, or fallback to 'today'
     const dataToSend = {
       ...formData,
       joiningDate: formData.joiningDate || today
     };
-    // --- EDITED SECTION END ---
 
     try {
-      // Note: We use dataToSend here instead of formData
       const response = await axios.post('/api/employee/addEmployee', dataToSend);
 
       const success = response.data.success;
@@ -134,7 +155,6 @@ const AddEmployee = () => {
 
       sucessToast(response.data.message || "Employee Added Successfully");
 
-      // Reset form
       setFormData({
         name: "",
         iqamaNumber: "",
@@ -147,13 +167,14 @@ const AddEmployee = () => {
       });
       setSelectedNationality("");
       setSelectedStatus("Active");
+      setIsRoleOpen(false); // Reset role dropdown state
       setErrors({});
       route.back();
 
     } catch (error) {
       console.error('Error adding employee:', error);
       errorToast(error.response?.data?.message || 'Failed to add employee. Please try again.');
-        route.back();
+      
     } finally {
       setIsLoading(false);
     }
@@ -274,22 +295,47 @@ const AddEmployee = () => {
 
               {/* Role and Joining Date */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                
+                {/* --- ROLE DROPDOWN START --- */}
                 <div>
                   <label className="block text-sm font-medium text-base-content mb-2">
                     Role / Position <span className="text-error">*</span>
                   </label>
-                  <input
-                    name="role"
-                    type="text"
-                    value={formData.role}
-                    onChange={handleInputChange}
-                    placeholder="e.g., Contractor"
-                    className={`input input-bordered w-full ${errors.role ? 'input-error' : ''}`}
-                  />
+                  
+                  <div className="relative">
+                    <button
+                      type="button"
+                      onClick={() => setIsRoleOpen(!isRoleOpen)}
+                      className={`input input-bordered w-full cursor-pointer flex items-center justify-between text-left ${errors.role ? 'input-error' : ''}`}
+                    >
+                      {/* Check if a role is selected, else show placeholder */}
+                      <span className={formData.role ? "text-base-content" : "text-base-content/40"}>
+                        {formData.role || "Select role/position"}
+                      </span>
+                      <ChevronDown className={`w-5 h-5 transition-transform ${isRoleOpen ? 'rotate-180' : ''}`} />
+                    </button>
+
+                    {isRoleOpen && (
+                      <div className="absolute z-50 w-full mt-2 bg-base-100 border border-base-300 rounded-lg shadow-lg max-h-60 overflow-y-auto">
+                        {roles.map((roleOption) => (
+                          <button
+                            key={roleOption}
+                            type="button"
+                            onClick={() => handleRoleSelect(roleOption)}
+                            className="w-full text-left px-4 py-2.5 hover:bg-base-200 transition-colors text-sm"
+                          >
+                            {roleOption}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+
                   {errors.role && (
                     <p className="text-error text-xs mt-1">{errors.role}</p>
                   )}
                 </div>
+                {/* --- ROLE DROPDOWN END --- */}
 
                 <div>
                   <label className="block text-sm font-medium text-base-content mb-2">
@@ -377,6 +423,7 @@ const AddEmployee = () => {
                     });
                     setSelectedNationality("");
                     setSelectedStatus("Active");
+                    setIsRoleOpen(false);
                     setErrors({});
                   }}
                   className="btn btn-ghost rounded-sm"

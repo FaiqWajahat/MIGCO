@@ -464,7 +464,7 @@ export default function MarkAttendancePage() {
                 <input type="text" placeholder="Search name or iqama..." onChange={(e) => setSearchQuery(e.target.value)} className="input input-sm w-full pl-10 h-10 bg-base-200/50 focus:bg-base-100 transition-colors border-transparent focus:border-[var(--primary-color)] rounded-lg"/>
              </div>
              <div className="flex gap-2 w-full md:w-auto">
-                 <div className="dropdown dropdown-end">
+                 <div className="dropdown dropdown-center w-full md:w-auto">
                     <button tabIndex={0} className="btn btn-sm btn-outline gap-2 h-10 w-full md:w-auto border-base-300">
                        <Filter className="w-4 h-4"/> Bulk
                     </button>

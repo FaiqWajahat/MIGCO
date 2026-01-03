@@ -1,5 +1,5 @@
 "use client";
-import React from "react";
+import React, { useMemo } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
@@ -29,8 +29,8 @@ const mainMenu = [
     icon: Warehouse,
     children: [
       { title: "All Projects", href: "/Dashboard/Projects" },
+      { title: "Project Foremans", href: "/Dashboard/Projects/Foremans" },
       { title: "Add Project", href: "/Dashboard/Projects/Add" },
-     
     ]
   },
   {
@@ -40,7 +40,6 @@ const mainMenu = [
       { title: "All Employees", href: "/Dashboard/Employees" },
       { title: "Add Employee", href: "/Dashboard/Employees/Add" },
       { title: "Expenses / Claims", href: "/Dashboard/Employees/Expense" },
-     
     ],
   },
   {
@@ -49,7 +48,6 @@ const mainMenu = [
     children: [
       { title: "All Assets", href: "/Dashboard/Company-Assets" },
       { title: "Add Asset", href: "/Dashboard/Company-Assets/Add" },
-      
     ],
   },
   {
@@ -65,6 +63,14 @@ const mainMenu = [
     icon: Wallet,
     href: "/Dashboard/Salary",
   },
+  {
+    title: "Quotations",
+    icon: ShieldCheck,
+    children: [
+      { title: "All Quotations", href: "/Dashboard/Quotations" },
+      { title: "Add Quotation", href: "/Dashboard/Quotations/Add" },
+    ],
+  }
 ];
 
 const accountMenu = [
@@ -76,7 +82,6 @@ const accountMenu = [
       { title: "Font Style", href: "/Dashboard/Setting/Fonts" },
     ],
   },
-  
   {
     title: "System Users",
     icon: ShieldCheck,
@@ -87,19 +92,21 @@ const accountMenu = [
     icon: BadgeCheck, 
     href: "/Dashboard/Profile" 
   },
-  
 ];
 
 // --- Components ---
-const SidebarItem = ({ item, pathname }) => {
+
+const SidebarItem = ({ item, activeHref }) => {
   const { t } = useLanguage();
-  const isActive = item.href === pathname;
-
-  const hasActiveChild = item.children?.some(
-    (child) => child.href === pathname
-  );
-
   const Icon = item.icon;
+
+  // Check if this item is the exact active one
+  const isActive = item.href === activeHref;
+
+  // Check if one of the children is the active one (to expand the menu)
+  const hasActiveChild = item.children?.some(
+    (child) => child.href === activeHref
+  );
 
   // Dropdown item
   if (item.children) {
@@ -126,7 +133,7 @@ const SidebarItem = ({ item, pathname }) => {
 
           <ul className="mt-2 ml-4 border-l-2 border-base-200 pl-2 space-y-1">
             {item.children.map((child, index) => {
-              const isChildActive = pathname === child.href;
+              const isChildActive = child.href === activeHref;
 
               return (
                 <li key={index}>
@@ -171,6 +178,39 @@ const DashboardMenu = () => {
   const pathname = usePathname();
   const { t } = useLanguage();
 
+  // --- LOGIC: Find the Best Matching Menu Item ---
+  // We use useMemo to avoid recalculating on every render, only when pathname changes
+  const activeHref = useMemo(() => {
+    // 1. Combine all menus
+    const allItems = [...mainMenu, ...accountMenu];
+    
+    // 2. Flatten recursive structure to get a simple list of all links { href, ... }
+    const flatten = (items) => {
+      let flat = [];
+      items.forEach(item => {
+        if (item.href) flat.push(item);
+        if (item.children) flat = flat.concat(flatten(item.children));
+      });
+      return flat;
+    };
+    
+    const allLinks = flatten(allItems);
+
+    // 3. Find all links that match the start of the current pathname
+    // e.g. If path is "/Dashboard/Projects/Add", matches are ["/Dashboard", "/Dashboard/Projects", "/Dashboard/Projects/Add"]
+    const matches = allLinks.filter(item => 
+      pathname === item.href || 
+      (pathname.startsWith(item.href) && pathname[item.href.length] === '/')
+    );
+
+    // 4. Sort by length descending (longest match is the most specific one)
+    matches.sort((a, b) => b.href.length - a.href.length);
+
+    // 5. Return the longest match
+    return matches.length > 0 ? matches[0].href : null;
+
+  }, [pathname]);
+
   return (
     <div className="w-full h-full flex flex-col justify-between px-2 bg-base-100">
       
@@ -182,7 +222,7 @@ const DashboardMenu = () => {
 
           <ul className="space-y-1">
             {mainMenu.map((item, index) => (
-              <SidebarItem key={index} item={item} pathname={pathname} />
+              <SidebarItem key={index} item={item} activeHref={activeHref} />
             ))}
           </ul>
         </div>
@@ -195,7 +235,7 @@ const DashboardMenu = () => {
 
         <ul className="space-y-1">
           {accountMenu.map((item, index) => (
-            <SidebarItem key={index} item={item} pathname={pathname} />
+            <SidebarItem key={index} item={item} activeHref={activeHref} />
           ))}
         </ul>
       </div>

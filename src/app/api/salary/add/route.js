@@ -12,7 +12,7 @@ export async function POST(request) {
     const { 
       employeeId, fromDate, toDate, baseSalary, absentDays, allowances, deductions, 
       manualExpenses, linkedExpenses, notes, status, 
-      absentDeduction, manualExpensesTotal, dbExpensesTotal, totalDeductions, netSalary, paidDate 
+      absentDeduction, manualExpensesTotal, dbExpensesTotal, totalDeductions, netSalary, paidDate , projectName
     } = body;
 
     // 1. Validation
@@ -37,6 +37,7 @@ export async function POST(request) {
       baseSalary, absentDays, allowances, deductions,
       manualExpenses: manualExpenses || [],
       linkedExpenses: linkedExpenses || [],
+      projectName: projectName || null,
       notes, status,
       absentDeduction, 
       manualExpensesTotal: manualExpensesTotal || 0,

@@ -34,6 +34,7 @@ const EmployeeSalarySchema = new mongoose.Schema({
   // --- Earnings ---
   baseSalary: { type: Number, required: true, min: 0 },
   allowances: { type: Number, required: true, default: 0, min: 0 },
+  projectName: { type: String, required: false, default: null },
 
   // --- Deductions Inputs ---
   absentDays: { type: Number, required: true, default: 0, min: 0 },

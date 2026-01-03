@@ -5,7 +5,8 @@ import { useParams, useRouter } from 'next/navigation';
 import { 
   Download, Plus, X, Save, Calculator, DollarSign, 
   Calendar, Trash2, ArrowLeft, Briefcase, 
-  AlertCircle, CheckCircle2, FileText, Receipt
+  AlertCircle, CheckCircle2, FileText, Receipt,
+  Building2, Eye
 } from 'lucide-react';
 import DashboardPageHeader from "@/Components/DashboardPageHeader";
 import CustomDropdown from "@/Components/CustomDropdown";
@@ -28,14 +29,22 @@ export default function EmployeeSalaryPage() {
   const [salaryRecords, setSalaryRecords] = useState([]);
   const [pendingExpenses, setPendingExpenses] = useState([]); 
   
+  // -- UPDATE: Project State --
+  const [projects, setProjects] = useState([]);
+  const [projectOptions, setProjectOptions] = useState([]);
+  
   // Stores { "expenseId": amountToDeduct }
   const [expenseAllocations, setExpenseAllocations] = useState({}); 
 
   // UI States
   const [showCalculator, setShowCalculator] = useState(false);
   const [selectedStatus, setSelectedStatus] = useState('All');
+  
+  // Modal States
   const [deleteModalOpen, setDeleteModalOpen] = useState(false);
+  const [viewModalOpen, setViewModalOpen] = useState(false); // -- UPDATE: View Modal State --
   const [recordToDelete, setRecordToDelete] = useState(null);
+  const [selectedRecord, setSelectedRecord] = useState(null); // -- UPDATE: Selected Record for View --
 
   // Form State
   const [formData, setFormData] = useState({
@@ -44,12 +53,14 @@ export default function EmployeeSalaryPage() {
     toDate: '',
     baseSalary: '',
     absentDays: '0',
-    manualExpenses: [], // Ad-hoc expenses not in DB
+    manualExpenses: [], 
     deductions: '0', 
     allowances: '0', 
     notes: '',
     status: "Pending",
-    employeeId: '' 
+    employeeId: '',
+    projectId: '', // -- UPDATE: Project ID in form --
+    projectName: '' // -- UPDATE: Project Name for UI --
   });
 
   const [calculatedData, setCalculatedData] = useState(null);
@@ -64,7 +75,6 @@ export default function EmployeeSalaryPage() {
       const emp = response.data.employee;
       setEmployee(emp);
       
-      // Initialize form with employee ID
       setFormData(prev => ({ 
         ...prev, 
         baseSalary: emp.salary, 
@@ -76,15 +86,29 @@ export default function EmployeeSalaryPage() {
     }
   }, [employeeId, router]);
 
+  // -- UPDATE: Fetch Projects --
+  const fetchProjects = useCallback(async () => {
+    try {
+      // Assuming you have an endpoint to get active projects
+      const response = await axios.get(`/api/attendance/project`); 
+      if (response.data.success) {
+        setProjects(response.data.projects || []);
+        console.log("Projects loaded:", response.data.projects);
+        // Prepare names for CustomDropdown
+        setProjectOptions((response.data.projects|| []).map(p => p.name));
+      }
+    } catch (error) {
+      console.error("Failed to load projects");
+    }
+  }, []);
+
   const fetchPendingExpenses = useCallback(async () => {
     try {
       const response = await axios.get(`/api/employee/expenses?employeeId=${employeeId}&limit=100`);
       if (response.data.success) {
-        // Filter: Get expenses that are NOT fully paid (Completed) and NOT already deducted
         const activeExpenses = response.data.data.expenses.filter(e => e.status !== 'Completed' && e.status !== 'Deducted');
         setPendingExpenses(activeExpenses);
 
-        // Initialize allocations: Default to deducting the FULL remaining amount
         const initialAllocations = {};
         activeExpenses.forEach(exp => {
             const remaining = exp.amount - (exp.paidAmount || 0);
@@ -112,10 +136,10 @@ export default function EmployeeSalaryPage() {
   useEffect(() => {
     if (employeeId) {
       setLoading(true);
-      Promise.all([fetchEmployeeData(), fetchSalaryRecords(), fetchPendingExpenses()])
+      Promise.all([fetchEmployeeData(), fetchSalaryRecords(), fetchPendingExpenses(), fetchProjects()])
         .finally(() => setLoading(false));
     }
-  }, [employeeId, fetchEmployeeData, fetchSalaryRecords, fetchPendingExpenses]);
+  }, [employeeId, fetchEmployeeData, fetchSalaryRecords, fetchPendingExpenses, fetchProjects]);
 
   // --- Logic & Calculations ---
 
@@ -142,12 +166,20 @@ export default function EmployeeSalaryPage() {
     }));
   };
 
-  // Handle manual input change in the DB Expenses table
+  const handleProjectSelect = (name) => {
+    const selected = projects.find(p => p.name === name);
+    if (selected) {
+        setFormData(prev => ({
+            ...prev,
+            projectName: selected.name,
+            projectId: selected._id
+        }));
+    }
+  };
+
   const handleAllocationChange = (expenseId, value, maxAmount) => {
     let numValue = parseFloat(value);
     if (isNaN(numValue)) numValue = 0;
-    
-    // Validation: Don't allow deducting more than is owed
     if (numValue > maxAmount) numValue = maxAmount;
     if (numValue < 0) numValue = 0;
 
@@ -167,24 +199,14 @@ export default function EmployeeSalaryPage() {
     const extraDeduct = parseFloat(deductions) || 0;
     const extraAllow = parseFloat(allowances) || 0;
 
-    // 1. Absent Deduction
     const dailyRate = base / 30; 
     const absentDeduction = dailyRate * absent;
     
-    // 2. Manual Ad-hoc Expenses
     const manualExpensesTotal = manualExpenses.reduce((sum, exp) => sum + (parseFloat(exp.amount) || 0), 0);
-
-    // 3. Database Expenses (Sum of user inputs in allocations)
     const dbExpensesTotal = Object.values(expenseAllocations).reduce((sum, val) => sum + val, 0);
-
-    // 4. Total Deductions
     const totalDeductions = absentDeduction + manualExpensesTotal + dbExpensesTotal + extraDeduct;
-    
-    // 5. Net Salary
     const netSalary = (base + extraAllow) - totalDeductions;
 
-    // 6. Prepare Payload for Backend
-    // Only send expenses that have an amount > 0 allocated
     const linkedExpensesPayload = Object.entries(expenseAllocations)
         .filter(([_, amount]) => amount > 0)
         .map(([id, amount]) => ({ expenseId: id, amount: amount }));
@@ -204,7 +226,6 @@ export default function EmployeeSalaryPage() {
     });
   }, [formData, expenseAllocations]);
 
-  // Auto-calculate trigger
   useEffect(() => {
     if(formData.fromDate && formData.toDate) {
       handleCalculate();
@@ -225,10 +246,11 @@ export default function EmployeeSalaryPage() {
       deductions: '0',
       allowances: '0',
       notes: '',
-      status: "Pending"
+      status: "Pending",
+      projectId: '', 
+      projectName: ''
     });
     
-    // Re-initialize allocations from pendingExpenses
     const initialAllocations = {};
     pendingExpenses.forEach(exp => {
         initialAllocations[exp._id] = exp.amount - (exp.paidAmount || 0);
@@ -244,45 +266,40 @@ export default function EmployeeSalaryPage() {
       errorToast("Please fill in the date range first");
       return;
     }
+    // -- UPDATE: Validation for Project --
+    if (!calculatedData.projectId) {
+        errorToast("Please select a project");
+        return;
+    }
 
     const finalPayload = { 
         ...calculatedData, 
         employeeId: calculatedData.employeeId || employee?._id || employeeId,
         status, 
         paidDate: status === 'Paid' ? new Date() : null,
-        // Backend must accept 'linkedExpenses' as [{ expenseId, amount }]
         linkedExpenses: calculatedData.linkedExpenses 
     };
 
     try {
       setPaying(true);
-      
       const response = await axios.post("/api/salary/add", finalPayload);
 
-      if (!response.data.success) {
-        throw new Error(response.data.message);
-      }
+      if (!response.data.success) throw new Error(response.data.message);
 
       successToast(status === 'Paid' ? "Salary processed & expenses updated" : "Draft saved successfully");
-
       setSalaryRecords(prev => [response.data.data, ...prev]);
       
-      // If Paid, refresh pending expenses (as amounts/statuses changed)
-      if (status === 'Paid') {
-         fetchPendingExpenses();
-      }
-
+      if (status === 'Paid') fetchPendingExpenses();
       resetForm();
       
     } catch (error) {
-      const serverMessage = error.response?.data?.message;
-      errorToast(serverMessage || error.message || "Failed to save record");
+      errorToast(error.response?.data?.message || error.message || "Failed to save record");
     } finally {
       setPaying(false);
     }
   };
 
-  const handleQuickPay = async (record) => {
+  const handleQuickPay = async (record, isFromModal = false) => {
     const recId = record._id || record.id;
     setUpdatingId(recId);
     
@@ -292,9 +309,7 @@ export default function EmployeeSalaryPage() {
         paidDate: new Date().toISOString()
       });
 
-      if (!response.data.success) {
-        throw new Error(response.data.message);
-      }
+      if (!response.data.success) throw new Error(response.data.message);
 
       successToast("Salary marked as Paid");
 
@@ -304,11 +319,14 @@ export default function EmployeeSalaryPage() {
           : r
       ));
       
-      // Refresh pending expenses
+      // Update selected record if modal is open
+      if(isFromModal) {
+         setSelectedRecord(prev => ({...prev, status: 'Paid', paidDate: new Date().toISOString() }));
+      }
+
       fetchPendingExpenses();
 
     } catch (error) {
-      console.error(error);
       errorToast(error.response?.data?.message || "Failed to update status");
     } finally {
       setUpdatingId(null);
@@ -316,15 +334,23 @@ export default function EmployeeSalaryPage() {
   };
 
   const handleDeleteRecord = async () => {
-    if (!recordToDelete) return;
+    const target = recordToDelete || selectedRecord; // Handle delete from table or modal
+    if (!target) return;
+    
     setDeleting(true);
     try {
-      const response = await axios.delete(`/api/salary/delete/${recordToDelete._id || recordToDelete.id}`);
+      const response = await axios.delete(`/api/salary/delete/${target._id || target.id}`);
       if (!response.data.success) throw new Error(response.data.message);
       
-      setSalaryRecords(prev => prev.filter(r => (r._id || r.id) !== (recordToDelete._id || recordToDelete.id)));
+      setSalaryRecords(prev => prev.filter(r => (r._id || r.id) !== (target._id || target.id)));
       successToast("Record deleted");
+      
+      // Close all modals
       setDeleteModalOpen(false);
+      setViewModalOpen(false); 
+      setRecordToDelete(null);
+      setSelectedRecord(null);
+
     } catch (error) {
       errorToast(error.message || "Delete failed");
     } finally {
@@ -333,7 +359,6 @@ export default function EmployeeSalaryPage() {
   };
 
   // --- Form Handlers ---
-
   const handleManualExpenseChange = (index, field, value) => {
     const newExpenses = [...formData.manualExpenses];
     newExpenses[index][field] = value;
@@ -363,11 +388,11 @@ export default function EmployeeSalaryPage() {
     return new Date(dateString).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
   };
 
-  // --- CSV Export ---
   const handleExportSingle = (record) => {
     const rows = [
       ['SALARY SLIP', 'MIGCO.'],
       ['Employee', employee?.name],
+      ['Project', record.projectName || 'N/A'],
       ['Period', `${formatDate(record.fromDate)} - ${formatDate(record.toDate)}`],
       ['Status', record.status],
       [],
@@ -386,7 +411,7 @@ export default function EmployeeSalaryPage() {
     const encodedUri = encodeURI(csvContent);
     const link = document.createElement("a");
     link.setAttribute("href", encodedUri);
-    link.setAttribute("download", `Salary_${employee?.name}.csv`);
+    link.setAttribute("download", `Salary_${employee?.name}_${record.month}.csv`);
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
@@ -403,14 +428,14 @@ export default function EmployeeSalaryPage() {
   return (
     <div className="">
       
-      {/* Delete Modal */}
+      {/* Delete Confirmation Modal */}
       {deleteModalOpen && (
-        <dialog className="modal modal-open">
+        <dialog className="modal modal-open z-[60]">
           <div className="modal-box rounded-lg">
             <h3 className="font-bold text-lg text-error flex items-center gap-2">
               <AlertCircle /> Confirm Deletion
             </h3>
-            <p className="py-4">Are you sure you want to delete the salary record for <span className="font-bold">{recordToDelete?.month}</span>?</p>
+            <p className="py-4">Are you sure you want to delete the salary record? This cannot be undone.</p>
             <div className="modal-action">
               <button className="btn btn-ghost" onClick={() => setDeleteModalOpen(false)}>Cancel</button>
               <button className="btn btn-error text-white" onClick={handleDeleteRecord} disabled={deleting}>
@@ -419,6 +444,110 @@ export default function EmployeeSalaryPage() {
             </div>
           </div>
           <div className="modal-backdrop bg-black/20" onClick={() => setDeleteModalOpen(false)}></div>
+        </dialog>
+      )}
+
+      {/* --- UPDATE: New Detail Modal --- */}
+      {viewModalOpen && selectedRecord && (
+        <dialog className="modal modal-open z-50">
+          <div className="modal-box rounded-xl max-w-2xl p-0 overflow-hidden bg-base-100 shadow-2xl">
+            {/* Modal Header */}
+            <div className="bg-base-200/60 p-5 flex justify-between items-start border-b border-base-200">
+                <div>
+                    <h3 className="font-bold text-xl flex items-center gap-2">
+                        {new Date(selectedRecord.month).toLocaleString("en-US", { month: "long", year: "numeric" })}
+                    </h3>
+                    <p className="text-sm opacity-60 mt-1 flex items-center gap-2">
+                        <Building2 size={14}/> {selectedRecord.projectName || 'General'}
+                    </p>
+                </div>
+                <div className="flex flex-col items-end gap-2">
+                    <button onClick={() => setViewModalOpen(false)} className="btn btn-sm btn-circle btn-ghost"><X size={20}/></button>
+                    <span className={`badge ${selectedRecord.status === 'Paid' ? 'badge-success text-white' : 'badge-warning'} badge-sm uppercase font-bold tracking-wider`}>
+                        {selectedRecord.status}
+                    </span>
+                </div>
+            </div>
+
+            {/* Modal Body */}
+            <div className="p-6 grid grid-cols-1 md:grid-cols-2 gap-8">
+                <div className="space-y-4">
+                    <h4 className="text-xs font-bold uppercase opacity-50 tracking-widest border-b pb-1">Period Details</h4>
+                    <div className="grid grid-cols-2 gap-4 text-sm">
+                        <div>
+                            <span className="block text-xs opacity-60">From Date</span>
+                            <span className="font-medium">{formatDate(selectedRecord.fromDate)}</span>
+                        </div>
+                        <div>
+                            <span className="block text-xs opacity-60">To Date</span>
+                            <span className="font-medium">{formatDate(selectedRecord.toDate)}</span>
+                        </div>
+                        <div>
+                            <span className="block text-xs opacity-60">Generated On</span>
+                            <span className="font-medium">{formatDate(selectedRecord.createdAt)}</span>
+                        </div>
+                        <div>
+                            <span className="block text-xs opacity-60">Paid On</span>
+                            <span className="font-medium">{selectedRecord.paidDate ? formatDate(selectedRecord.paidDate) : '-'}</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div className="space-y-3">
+                    <h4 className="text-xs font-bold uppercase opacity-50 tracking-widest border-b pb-1">Financials</h4>
+                    <div className="space-y-2 text-sm">
+                        <div className="flex justify-between">
+                            <span className="opacity-70">Base Salary</span>
+                            <span className="font-mono">{formatCurrency(selectedRecord.baseSalary)}</span>
+                        </div>
+                        <div className="flex justify-between text-success">
+                            <span className="opacity-70">Allowances</span>
+                            <span className="font-mono">+{formatCurrency(selectedRecord.allowances)}</span>
+                        </div>
+                        <div className="flex justify-between text-error">
+                            <span className="opacity-70">Deductions</span>
+                            <span className="font-mono">-{formatCurrency((selectedRecord.totalDeductions || (selectedRecord.deductions + (selectedRecord.dbExpensesTotal||0) + (selectedRecord.absentDeduction||0))))}</span>
+                        </div>
+                        <div className="divider my-1"></div>
+                        <div className="flex justify-between items-center bg-base-200/50 p-2 rounded">
+                            <span className="font-bold">Net Payable</span>
+                            <span className="font-bold text-lg text-[var(--primary-color)] font-mono">{formatCurrency(selectedRecord.netSalary)}</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            {/* Modal Actions */}
+            <div className="p-4 bg-base-200/30 border-t border-base-200 flex gap-3 justify-end">
+                 {/* Delete Button */}
+                 <button 
+                    onClick={() => setDeleteModalOpen(true)} // Triggers the delete confirmation
+                    className="btn btn-ghost text-error hover:bg-error/10"
+                >
+                    <Trash2 size={18}/> Delete
+                </button>
+
+                {/* Download Button */}
+                <button 
+                    onClick={() => handleExportSingle(selectedRecord)} 
+                    className="btn btn-outline"
+                >
+                    <Download size={18}/> Download
+                </button>
+
+                {/* Mark as Paid Button */}
+                {selectedRecord.status !== 'Paid' && (
+                    <button 
+                        onClick={() => handleQuickPay(selectedRecord, true)} 
+                        disabled={updatingId === selectedRecord._id}
+                        className="btn bg-[var(--primary-color)] text-white hover:bg-[var(--primary-color)]/90 border-none min-w-[140px]"
+                    >
+                        {updatingId === selectedRecord._id ? <span className="loading loading-spinner"/> : <><CheckCircle2 size={18}/> Mark Paid</>}
+                    </button>
+                )}
+            </div>
+          </div>
+          <div className="modal-backdrop bg-black/40 backdrop-blur-sm" onClick={() => setViewModalOpen(false)}></div>
         </dialog>
       )}
 
@@ -434,7 +563,7 @@ export default function EmployeeSalaryPage() {
 
       <div className=" space-y-6 mt-10">
 
-        {/* Stats Grid */}
+        {/* Stats Grid - Same as before */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
             <div className="stats shadow bg-base-100">
             <div className="stat">
@@ -459,7 +588,6 @@ export default function EmployeeSalaryPage() {
             <div className="stat">
                 <div className="stat-title text-xs">Pending Liabilities</div>
                 <div className="stat-value text-2xl text-error">
-                {/* Sum of remaining balances */}
                 {formatCurrency(pendingExpenses.reduce((sum, e) => sum + (e.amount - (e.paidAmount||0)), 0))}
                 </div>
                 <div className="stat-desc ">Total DB Expenses</div>
@@ -518,15 +646,29 @@ export default function EmployeeSalaryPage() {
                 {/* Inputs Column */}
                 <div className="lg:col-span-8 space-y-6">
                   
-                  {/* 1. Time Period */}
+                  {/* 1. Time Period & Project Selection */}
                   <div className="bg-base-200/50 p-4 rounded-lg">
-                    <h4 className="font-semibold text-sm mb-3 flex items-center gap-2"><Calendar size={16}/> Salary Period</h4>
-                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                      <div className="form-control">
-                        <label className="label text-xs opacity-70">Quick Select Month</label>
-                        <input required type="month" className="input input-sm input-bordered " 
-                          onChange={handleMonthSelect} value={formData.monthReference} />
-                      </div>
+                    <h4 className="font-semibold text-sm mb-3 flex items-center gap-2"><Calendar size={16}/> Period & Project</h4>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4">
+                         {/* -- UPDATE: Project Dropdown -- */}
+                         <div className="form-control w-full"> 
+                            <label className="label text-xs opacity-70 block">Select Project</label>
+                           < div className="w-full">
+                            <CustomDropdown 
+                                value={formData.projectName || "Select Project"} 
+                                setValue={handleProjectSelect} 
+                                dropdownMenu={projectOptions} 
+                            />
+                            </div>
+
+                        </div>
+                        <div className="form-control">
+                            <label className="label text-xs opacity-70">Quick Select Month</label>
+                            <input required type="month" className="input input-sm input-bordered " 
+                            onChange={handleMonthSelect} value={formData.monthReference} />
+                        </div>
+                    </div>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                       <div className="form-control">
                         <label className="label text-xs opacity-70">From Date</label>
                         <input type="date" required className="input input-sm input-bordered "
@@ -566,7 +708,7 @@ export default function EmployeeSalaryPage() {
                     </div>
                   </div>
 
-                  {/* 4. DB EXPENSES TABLE - With Manual Inputs */}
+                  {/* 4. DB EXPENSES TABLE - Same as before */}
                   <div className="bg-base-100 border border-base-200 rounded-lg p-4">
                     <h4 className="font-semibold text-sm mb-2 flex items-center gap-2">
                         <Receipt size={16} className="text-warning"/> Pending Liabilities (Database)
@@ -599,7 +741,6 @@ export default function EmployeeSalaryPage() {
                                                     {formatCurrency(remaining)}
                                                 </td>
                                                 <td className="text-right">
-                                                    {/* INPUT FIELD FOR MANUAL ALLOCATION */}
                                                     <input 
                                                         type="number" 
                                                         className="input input-xs input-bordered w-full text-right font-bold text-error"
@@ -657,6 +798,7 @@ export default function EmployeeSalaryPage() {
                     
                     {calculatedData && (
                       <div className="space-y-3 text-sm">
+                        <div className="badge badge-neutral w-full p-3 h-auto">{formData.projectName || 'No Project Selected'}</div>
                         <SummaryRow label="Base Pay" amount={calculatedData.baseSalary} />
                         <SummaryRow label="Allowances" amount={calculatedData.extraAllowances} isAdd />
                         <div className="divider my-1"></div>
@@ -720,7 +862,7 @@ export default function EmployeeSalaryPage() {
               <table className="table table-md">
                 <thead className="bg-base-200/50 text-xs uppercase">
                   <tr>
-                    <th>Period</th>
+                    <th>Period / Project</th>
                     <th className="text-right">Earnings</th>
                     <th className="text-right">Deductions</th>
                     <th className="text-right">Net Pay</th>
@@ -732,7 +874,12 @@ export default function EmployeeSalaryPage() {
                   {filteredRecords.length === 0 ? (
                     <tr><td colSpan="6" className="text-center py-10 opacity-50">No salary records found.</td></tr>
                   ) : filteredRecords.map((record) => (
-                    <tr key={record._id || record.id} className="hover:bg-base-100 group transition-colors">
+                    // -- UPDATE: Row click opens modal --
+                    <tr 
+                        key={record._id || record.id} 
+                        className="hover:bg-base-100 group transition-colors cursor-pointer"
+                        onClick={() => { setSelectedRecord(record); setViewModalOpen(true); }}
+                    >
                       <td>
                         <div className="font-bold">
                         {record?.month 
@@ -740,8 +887,9 @@ export default function EmployeeSalaryPage() {
                             : "Unknown Period"
                         }
                         </div>
-                        <div className="text-xs opacity-50">
-                          {formatDate(record.fromDate)} - {formatDate(record.toDate)}
+                        <div className="flex flex-col text-xs opacity-50">
+                           <span>{formatDate(record.fromDate)} - {formatDate(record.toDate)}</span>
+                           <span className="font-semibold text-primary/70">{record.projectName || 'No Project'}</span>
                         </div>
                       </td>
                       <td className="text-right font-medium text-success">
@@ -757,36 +905,12 @@ export default function EmployeeSalaryPage() {
                         <span className={`badge badge-sm font-medium ${record.status === 'Paid' ? 'badge-success text-white' : 'badge-warning'}`}>
                           {record.status}
                         </span>
-                        {record.status === 'Paid' && record.paidDate && (
-                           <div className="text-[10px] opacity-60 mt-1">On: {formatDate(record.paidDate)}</div>
-                        )}
                       </td>
                       <td className="text-right">
-                        <div className="join">
-                          
-                          {/* MARK AS PAID BUTTON */}
-                          {record.status !== 'Paid' && (
-                            <button 
-                              onClick={() => handleQuickPay(record)} 
-                              disabled={updatingId === (record._id || record.id)}
-                              className="btn btn-sm btn-ghost join-item text-success tooltip tooltip-left" 
-                              data-tip="Mark as Paid"
-                            >
-                              {updatingId === (record._id || record.id) ? (
-                                <span className="loading loading-spinner loading-xs text-[var(--primary-color)]"></span>
-                              ) : (
-                                <DollarSign size={16} /> 
-                              )}
-                            </button>
-                          )}
-
-                          <button onClick={() => handleExportSingle(record)} className="btn btn-sm btn-ghost join-item tooltip" data-tip="Export CSV">
-                            <Download size={16} className="text-base-content/70"/>
-                          </button>
-                          <button onClick={() => { setRecordToDelete(record); setDeleteModalOpen(true); }} className="btn btn-sm btn-ghost join-item text-error tooltip" data-tip="Delete">
-                            <Trash2 size={16}/>
-                          </button>
-                        </div>
+                        {/* -- UPDATE: Removed buttons here to keep it minimal as requested, or keep just an eye icon -- */}
+                        <button className="btn btn-sm btn-ghost text-base-content/50 group-hover:text-base-content">
+                            <Eye size={18}/>
+                        </button>
                       </td>
                     </tr>
                   ))}

@@ -17,8 +17,12 @@ const ExpenseSchema = new mongoose.Schema({
     required: true,
     default: Date.now,
   },
+  linkedInvoiceId: {
+    type: mongoose.Schema.Types.ObjectId,
+    required: false, 
+  }
+}, { timestamps: true });
 
-}, { timestamps: true }); 
 
 // 2. Define Income Sub-Schema
 const IncomeSchema = new mongoose.Schema({

@@ -1,235 +1,83 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useRouter, useParams, useSearchParams, usePathname } from 'next/navigation';
 import Link from 'next/link';
 import axios from 'axios'; 
 import { 
-  ArrowLeft, Plus, Trash2, DollarSign, TrendingUp, 
-  AlertCircle, Loader, BarChart3, Search, LayoutGrid, Wallet, Receipt,
-  X, AlertTriangle, 
-  Loader2
+  ArrowLeft, Plus, Trash2, TrendingUp, 
+  LayoutGrid, Wallet, Receipt,
+  X, AlertTriangle, MapPin, Calendar, User, PieChart,
+  Loader2, BarChart3, FileText, Tag, Banknote
 } from 'lucide-react';
 import DashboardPageHeader from '@/Components/DashboardPageHeader';
-import CustomLoader from '@/Components/CustomLoader';
 import { errorToast, successToast } from '@/lib/toast';
 
-// --- 1. LOCAL SUB-COMPONENTS ---
-
-// *** Custom Delete Modal Component ***
-const DeleteConfirmationModal = ({ isOpen, onClose, onConfirm, isDeleting, type }) => {
-  if (!isOpen) return null;
-
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm animate-in fade-in duration-200">
-      <div className="bg-base-100 rounded-xl shadow-xl w-full max-w-md p-6 relative animate-in zoom-in-95 duration-200">
-        <button 
-          onClick={onClose} 
-          disabled={isDeleting}
-          className="absolute right-4 top-4   -400 hover:  -600 transition-colors"
-        >
-          <X size={20} />
-        </button>
-        
-        <div className="flex flex-col items-center text-center">
-          <div className="w-12 h-12 rounded-full bg-error/10 flex items-center justify-center mb-4 text-error">
-            <AlertTriangle size={24} />
-          </div>
-          
-          <h3 className="text-lg font-bold   -800 mb-2">
-            Delete {type === 'expense' ? 'Expense' : 'Income'}?
-          </h3>
-          
-          <p className="  text-sm mb-6">
-            Are you sure you want to delete this record? This action cannot be undone and will affect your project totals.
-          </p>
-          
-          <div className="flex gap-3 w-full">
-            <button 
-              onClick={onClose}
-              disabled={isDeleting}
-              className="btn btn-sm flex-1     -700 border-none"
-            >
-              Cancel
-            </button>
-            <button 
-              onClick={onConfirm}
-              disabled={isDeleting}
-              className="btn btn-sm flex-1 btn-error text-white"
-            >
-              {isDeleting ? <Loader2 size={16} className="animate-spin" /> : 'Delete Record'}
-            </button>
-          </div>
-        </div>
-      </div>
+// --- COMPONENT: SKELETON LOADER ---
+const ProjectSkeleton = () => (
+  <div className="animate-pulse space-y-6">
+    <div className="h-48 bg-base-200 rounded-lg w-full"></div>
+    <div className="flex gap-4 overflow-hidden">
+      <div className="h-10 bg-base-200 rounded-full w-32"></div>
+      <div className="h-10 bg-base-200 rounded-full w-32"></div>
+      <div className="h-10 bg-base-200 rounded-full w-32"></div>
     </div>
-  );
-};
-
-const DashboardSearch = ({ placeholder, value, onChange }) => (
-  <div className="relative w-full md:w-64">
-    <Search size={18} className="absolute left-3 top-1/2 transform -translate-y-1/2   -400" />
-    <input 
-      type="text" 
-      placeholder={placeholder}
-      value={value}
-      onChange={(e) => onChange(e.target.value)}
-      className="w-full pl-10 pr-4 py-2 border text-sm border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-neutral bg-base-200"
-    />
+    <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+      <div className="h-64 bg-base-200 rounded-lg w-full lg:col-span-2"></div>
+      <div className="h-64 bg-base-200 rounded-lg w-full"></div>
+    </div>
   </div>
 );
 
-const TransactionTable = ({ data, type, onDelete, total }) => {
-  const isExpense = type === 'expense';
-  const colorClass = isExpense ? 'text-error' : 'text-success';
-  const EmptyIcon = isExpense ? DollarSign : TrendingUp;
-  const title = isExpense ? 'Expense History' : 'Income History';
-
-  return (
-    <div className="bg-base-100 rounded-xl shadow-sm border border-base-200 overflow-hidden h-full flex flex-col">
-      <div className="p-4 border-b border-base-200 flex justify-between items-center bg-base-50/50">
-        <h3 className="font-semibold   -700">{title}</h3>
-        <span className="text-xs   -500 font-medium bg-base-200 px-2 py-1 rounded-full">{data.length} records</span>
-      </div>
-      
-      <div className="overflow-x-auto flex-1">
-        <table className="table table-zebra w-full whitespace-nowrap">
-          <thead className="bg-base-100   -500">
-            <tr>
-              <th className="w-32">Date</th>
-              <th>Description</th>
-              <th className="text-right">Amount (SAR)</th>
-              <th className="w-10"></th>
-            </tr>
-          </thead>
-          <tbody>
-            {data.map((item) => (
-              <tr key={item._id || item.id} className="hover:bg-base-200/50 transition-colors group">
-                <td className="font-medium text-xs   -500">{new Date(item.date).toLocaleDateString()}</td>
-                <td className="whitespace-normal min-w-[180px] font-medium   -700">{item.description}</td>
-                <td className={`text-right font-bold ${colorClass}`}>
-                  SAR {item.amount.toLocaleString()}
-                </td>
-                <td>
-                  <button onClick={() => onDelete(item._id || item.id)} className="btn btn-ghost btn-xs text-error hover:text-error transition-opacity">
-                    <Trash2 size={14} />
-                  </button>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-
-      {data.length > 0 && (
-        <div className="p-4 border-t border-base-200 bg-base-50/50 flex justify-between items-center">
-          <span className="text-sm font-medium   -500">Total {isExpense ? 'Spent' : 'Earned'}</span>
-          <span className={`text-xl font-bold ${colorClass}`}>SAR {total.toLocaleString()}</span>
-        </div>
-      )}
-
-      {data.length === 0 && (
-        <div className="flex flex-col items-center justify-center py-12 text-center flex-1">
-          <div className="bg-base-200 p-4 rounded-full mb-3">
-            <EmptyIcon size={24} className="  -400" />
-          </div>
-          <p className="  -500 font-medium">No records found</p>
-        </div>
-      )}
-    </div>
-  );
-};
-
-const ActivityTable = ({ transactions }) => (
-  <div className="bg-base-100 rounded-xl shadow-sm border border-base-200 overflow-hidden">
-    <div className="overflow-x-auto">
-        <h3 className="font-semibold pt-4 pl-4 pb-2 ">Recent Activity</h3>
-      <table className="table table-zebra w-full whitespace-nowrap">
-        <thead className="  -500">
-          <tr>
-            <th>Date</th>
-            <th>Description</th>
-            <th>Type</th>
-            <th className="text-right">Amount</th>
-          </tr>
-        </thead>
-        <tbody>
-          {transactions.map((item, index) => {
-            const isExp = item.type === 'expense';
-            return (
-              <tr key={index}>
-                <td className="text-xs font-medium   -500">{new Date(item.date).toLocaleDateString()}</td>
-                <td className="whitespace-normal min-w-[200px]   -700">{item.description}</td>
-                <td>
-                  <span className={`badge badge-sm font-medium ${isExp ? 'badge-error badge-outline' : 'badge-success badge-outline'}`}>
-                    {isExp ? 'Expense' : 'Income'}
-                  </span>
-                </td>
-                <td className={`text-right font-bold ${isExp ? 'text-error' : 'text-success'}`}>
-                  {isExp ? '-' : '+'}SAR {item.amount.toLocaleString()}
-                </td>
-              </tr>
-            );
-          })}
-        </tbody>
-      </table>
-    </div>
-    {transactions.length === 0 && <div className="p-8 text-center   -500">No recent activity</div>}
-  </div>
-);
-
-
-// --- 2. MAIN PAGE COMPONENT ---
-
-export default  function   ProjectDashboardPage () {
+export default function ProjectDashboardPage() {
   const router = useRouter();
   const params = useParams();
   const searchParams = useSearchParams();
   const pathname = usePathname();
   
-  const projectId =  params?.id;
+  const projectId = params?.id;
   const currentViewParam = searchParams.get('view') || 'overview';
-  const activeTab = currentViewParam.charAt(0).toUpperCase() + currentViewParam.slice(1);
-
+  
+  // --- STATES ---
   const [loading, setLoading] = useState(true);
   const [project, setProject] = useState(null);
-  const [searchTerm, setSearchTerm] = useState('');
+  const [activeTab, setActiveTab] = useState('Overview');
 
-  // Forms
-  const [expenseForm, setExpenseForm] = useState({ date: new Date().toISOString().split('T')[0], description: '', amount: '' });
-  const [incomeForm, setIncomeForm] = useState({ date: new Date().toISOString().split('T')[0], description: '', amount: '' });
-  
-  // Validation States
-  const [expenseErrors, setExpenseErrors] = useState({});
-  const [incomeErrors, setIncomeErrors] = useState({});
+  // Modals
+  const [isAddExpenseOpen, setIsAddExpenseOpen] = useState(false);
+  const [isAddIncomeOpen, setIsAddIncomeOpen] = useState(false);
+  const [deleteModal, setDeleteModal] = useState({ isOpen: false, id: null, type: null });
 
-  // Adding States
-  const [isAddingExpense, setIsAddingExpense] = useState(false);
-  const [isAddingIncome, setIsAddingIncome] = useState(false);
-
-  // Delete State
-  const [deleteModal, setDeleteModal] = useState({ isOpen: false, id: null, type: null }); // type: 'expense' | 'income'
+  // Processing
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
 
-  // --- API FUNCTIONS ---
+  // Forms
+  const initialFormState = { date: new Date().toISOString().split('T')[0], description: '', amount: '' };
+  const [expenseForm, setExpenseForm] = useState(initialFormState);
+  const [incomeForm, setIncomeForm] = useState(initialFormState);
 
-  // 1. Fetch Project Data
+  // Quick Tags
+  const expenseTags = ["Material Purchase", "Labor Cost", "Transportation", "Food", "Fuel", "Site Equipment"];
+  const incomeTags = ["Client Payment", "Advance", "Refund", "Adjustment"];
+
+  // Styles
+  const primaryBg = { backgroundColor: 'var(--primary-color)' };
+  const primaryText = { color: 'var(--primary-color)' };
+
+  // --- API CALLS ---
   const fetchProjectData = useCallback(async () => {
     if (!projectId) return;
+    if(!project) setLoading(true); 
     try {
-      setLoading(true);
       const response = await axios.get(`/api/project/${projectId}/get`);
-      const success = response.data.success;
-      if (!success) {
-        errorToast(response.data.message || "Something went wrong");
-        setLoading(false);
+      if (response.data.success) {
+        setProject(response.data.project);
+      } else {
+        errorToast(response.data.message);
         router.back();
-        return;
       }
-      setProject(response.data.project);
-
     } catch (error) {
-      console.error("Error fetching project:", error);
       errorToast("Failed to load project data");
     } finally {
       setLoading(false);
@@ -240,462 +88,356 @@ export default  function   ProjectDashboardPage () {
     fetchProjectData();
   }, [fetchProjectData]);
 
-  // Validation Helpers
-  const validateExpense = () => {
-    const errors = {};
-    if (!expenseForm.date) errors.date = "Date is required";
-    if (!expenseForm.description.trim()) errors.description = "Description is required";
-    if (!expenseForm.amount || parseFloat(expenseForm.amount) <= 0) errors.amount = "Valid amount is required";
-    
-    setExpenseErrors(errors);
-    return Object.keys(errors).length === 0;
+  useEffect(() => {
+    if(currentViewParam) {
+        const formatted = currentViewParam.charAt(0).toUpperCase() + currentViewParam.slice(1);
+        setActiveTab(formatted);
+    }
+  }, [currentViewParam]);
+
+  // --- HANDLERS ---
+
+  const handleTabChange = (tabName) => {
+    setActiveTab(tabName);
+    const params = new URLSearchParams(searchParams);
+    params.set('view', tabName.toLowerCase());
+    router.replace(`${pathname}?${params.toString()}`, { scroll: false });
   };
 
-  const validateIncome = () => {
-    const errors = {};
-    if (!incomeForm.date) errors.date = "Date is required";
-    if (!incomeForm.description.trim()) errors.description = "Description is required";
-    if (!incomeForm.amount || parseFloat(incomeForm.amount) <= 0) errors.amount = "Valid amount is required";
-    
-    setIncomeErrors(errors);
-    return Object.keys(errors).length === 0;
+  const appendDescription = (text, type) => {
+    if (type === 'expense') {
+      setExpenseForm(prev => ({ ...prev, description: text }));
+    } else {
+      setIncomeForm(prev => ({ ...prev, description: text }));
+    }
   };
 
-  // 2. Add Expense
-  const handleAddExpense = async () => {
-    if (!validateExpense()) return;
+  const handleAddExpense = async (e) => {
+    e.preventDefault();
+    if (!expenseForm.amount || parseFloat(expenseForm.amount) <= 0) return errorToast("Please enter a valid amount");
+    if (!expenseForm.description.trim()) return errorToast("Description is required");
     
-    setIsAddingExpense(true); 
+    setIsSubmitting(true);
     try {
       const response = await axios.post(`/api/project/${projectId}/expenses`, {
         date: expenseForm.date,
         description: expenseForm.description.trim(),
         amount: parseFloat(expenseForm.amount)
       });
-
-      const success= response.data.success
-      if(!success)
-      {
-        errorToast(response.data.message || "Something went wrong")
-        setIsAddingExpense(false); 
-        return;
+      if (response.data.success) {
+        successToast("Expense added");
+        setProject(response.data.data);
+        setExpenseForm(initialFormState);
+        setIsAddExpenseOpen(false);
       }
-
-      successToast(response.data.message || "Expense add successfully");
-      setProject(response.data.data);
-      setExpenseForm({ date: new Date().toISOString().split('T')[0], description: '', amount: '' });
-      setExpenseErrors({});
     } catch (error) {
-      console.error("Error adding expense:", error);
-      alert("Failed to add expense. Please try again.");
+      errorToast("Failed to add expense");
     } finally {
-      setIsAddingExpense(false); 
+      setIsSubmitting(false);
     }
   };
 
-  // 3. Add Income
-  const handleAddIncome = async () => {
-    if (!validateIncome()) return;
-    
-    setIsAddingIncome(true); 
+  const handleAddIncome = async (e) => {
+    e.preventDefault();
+    if (!incomeForm.amount || parseFloat(incomeForm.amount) <= 0) return errorToast("Please enter a valid amount");
+    if (!incomeForm.description.trim()) return errorToast("Description is required");
+
+    setIsSubmitting(true);
     try {
       const response = await axios.post(`/api/project/${projectId}/incomes`, {
         date: incomeForm.date,
         description: incomeForm.description.trim(),
         amount: parseFloat(incomeForm.amount)
       });
-      const success= response.data.success
-      if(!success)
-      {
-        errorToast(response.data.message || "Something went wrong")
-        setIsAddingIncome(false); 
-        return;
+      if (response.data.success) {
+        successToast("Income added");
+        setProject(response.data.data);
+        setIncomeForm(initialFormState);
+        setIsAddIncomeOpen(false);
       }
-
-      successToast(response.data.message || "Income added successfully");
-      setProject(response.data.data);
-      setIncomeForm({ date: new Date().toISOString().split('T')[0], description: '', amount: '' });
-      setIncomeErrors({});
     } catch (error) {
-      console.error("Error adding income:", error);
-      alert("Failed to add income.");
+      errorToast("Failed to add income");
     } finally {
-      setIsAddingIncome(false);
+      setIsSubmitting(false);
     }
   };
 
-  // --- DELETE HANDLERS ---
-
-  const initiateDelete = (id, type) => {
-    setDeleteModal({ isOpen: true, id, type });
-  };
-
   const executeDelete = async () => {
-    if (!deleteModal.id || !deleteModal.type) return;
-
+    if (!deleteModal.id) return;
     setIsDeleting(true);
     try {
-      let response;
-      if (deleteModal.type === 'expense') {
-         response = await axios.delete(`/api/project/${projectId}/expenses/${deleteModal.id}`);
-      } else {
-         response = await axios.delete(`/api/project/${projectId}/incomes/${deleteModal.id}`);
+      const endpoint = deleteModal.type === 'expense' 
+        ? `/api/project/${projectId}/expenses/${deleteModal.id}` 
+        : `/api/project/${projectId}/incomes/${deleteModal.id}`;
+      
+      const response = await axios.delete(endpoint);
+      if (response.data.success) {
+        successToast("Record deleted");
+        setProject(response.data.data);
+        setDeleteModal({ isOpen: false, id: null, type: null });
       }
-      const success = response.data.success
-
-       
-      if(!success)
-      {
-        errorToast(response.data.message || "something went wrong")
-         setIsDeleting(false);
-        return
-      }
-      successToast(response.data.message || "record deleted successfully ")
-      setProject(response.data.data); 
-      setDeleteModal({ isOpen: false, id: null, type: null }); 
     } catch (error) {
-      console.error(`Error deleting ${deleteModal.type}:`, error);
-      alert(`Failed to delete ${deleteModal.type}.`);
+      errorToast("Failed to delete record");
     } finally {
       setIsDeleting(false);
     }
   };
 
-
-  // --- CALCULATION & HELPERS ---
-
-  const handleTabChange = (tabName) => {
-    const params = new URLSearchParams(searchParams);
-    if (tabName) params.set('view', tabName.toLowerCase());
-    else params.delete('view');
-    router.replace(`${pathname}?${params.toString()}`, { scroll: false });
-  };
-
-  const calculateTotals = () => {
+  // --- CALCULATIONS (Memoized) ---
+  const totals = useMemo(() => {
     if (!project) return { totalExpenses: 0, totalIncome: 0, balance: 0 };
     const totalExpenses = project.expenses?.reduce((sum, e) => sum + e.amount, 0) || 0;
     const totalIncome = project.income?.reduce((sum, i) => sum + i.amount, 0) || 0;
     return { totalExpenses, totalIncome, balance: totalIncome - totalExpenses };
-  };
+  }, [project]);
 
-  const getFilteredExpenses = () => {
-    let filtered = project?.expenses || [];
-    if (searchTerm) filtered = filtered.filter(e => e.description.toLowerCase().includes(searchTerm.toLowerCase()));
-    return filtered.sort((a, b) => new Date(b.date) - new Date(a.date));
-  };
+  const filteredData = useMemo(() => {
+    if (!project) return [];
+    let data = activeTab === 'Expenses' ? project.expenses : project.income;
+    if (!data) return [];
+    return [...data].sort((a, b) => new Date(b.date) - new Date(a.date));
+  }, [project, activeTab]);
 
-  const getFilteredIncome = () => {
-    let filtered = project?.income || [];
-    if (searchTerm) filtered = filtered.filter(i => i.description.toLowerCase().includes(searchTerm.toLowerCase()));
-    return filtered.sort((a, b) => new Date(b.date) - new Date(a.date));
-  };
-
-  const getActivityData = () => {
-    const exps = (project?.expenses || []).map(e => ({ ...e, type: 'expense' }));
-    const incs = (project?.income || []).map(i => ({ ...i, type: 'income' }));
-    return [...exps, ...incs].sort((a, b) => {
-      const dateA = a.createdAt ? new Date(a.createdAt) : new Date(a.date);
-      const dateB = b.createdAt ? new Date(b.createdAt) : new Date(b.date);
-      return dateB - dateA;
-    }).slice(0, 10);
-  };
+  const recentActivity = useMemo(() => {
+    if (!project) return [];
+    const exps = (project.expenses || []).map(e => ({ ...e, type: 'expense' }));
+    const incs = (project.income || []).map(i => ({ ...i, type: 'income' }));
+    return [...exps, ...incs].sort((a, b) => new Date(b.date) - new Date(a.date)).slice(0, 10);
+  }, [project]);
 
   const breadData = [
     { name: "Dashboard", href: "/Dashboard" },
     { name: "Projects", href: "/Dashboard/Projects" },
-    { name: project?.name || "Project Details", href: "#" },
+    { name: project?.name || "Loading...", href: "#" },
   ];
 
-  if (loading) return <CustomLoader text={"Loading project dashboard..."}/>
-
+  if (loading) return <><DashboardPageHeader breadData={breadData} heading="Project Dashboard" /><ProjectSkeleton /></>;
+  
   if (!project) return (
-    <div className="min-h-screen flex items-center justify-center">
-      <div className="text-center">
-        <AlertCircle size={64} className="text-error mx-auto mb-4" />
-        <h2 className="text-xl font-bold mb-2">Project Not Found</h2>
-        <button onClick={() => router.push('/Dashboard/Projects')} className="btn btn-sm bg-[var(--primary-color)] text-white"><ArrowLeft className="w-4 h-4 mr-1" />Back to Projects</button>
-      </div>
+    <div className="min-h-[60vh] flex flex-col items-center justify-center text-center">
+      <AlertCircle size={48} className="text-base-content/30 mb-4" />
+      <h2 className="text-xl font-bold text-base-content">Project Not Found</h2>
+      <button onClick={() => router.back()} className="btn btn-sm mt-4">Go Back</button>
     </div>
   );
 
-  const totals = calculateTotals();
-  const budgetUtilization = project.estimatedBudget ? (totals.totalExpenses / project.estimatedBudget) * 100 : 0;
-  const tabs = [{ name: 'Overview', icon: LayoutGrid }, { name: 'Expenses', icon: Receipt }, { name: 'Income', icon: Wallet }];
-
   return (
     <>
-      {/* --- MOUNT MODAL HERE --- */}
-      <DeleteConfirmationModal 
-        isOpen={deleteModal.isOpen} 
-        onClose={() => setDeleteModal({ isOpen: false, id: null, type: null })}
-        onConfirm={executeDelete}
-        isDeleting={isDeleting}
-        type={deleteModal.type}
-      />
-
       <DashboardPageHeader breadData={breadData} heading={project.name} />
 
-      {/* --- STATS SECTION --- */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6 mt-10">
-        <div className="stats shadow bg-base-100 border border-base-200">
-          <div className="stat">
-            <div className="stat-title text-xs font-medium uppercase tracking-wider   -500"> Expenses</div>
-            <div className="stat-value text-2xl text-error mt-1">SAR {totals.totalExpenses.toLocaleString()}</div>
-            <div className='stat-desc text-xs '> Total Expenses</div>
-          </div>
-        </div>
-        <div className="stats shadow bg-base-100 border border-base-200">
-          <div className="stat">
-            <div className="stat-title text-xs font-medium uppercase tracking-wider   -500">Income</div>
-            <div className="stat-value text-2xl text-success mt-1">SAR {totals.totalIncome.toLocaleString()}</div>
-             <div className='stat-desc text-xs '> Total Income</div>
-          </div>
-        </div>
-        <div className="stats shadow bg-base-100 border border-base-200">
-          <div className="stat">
-            <div className="stat-title text-xs font-medium uppercase tracking-wider   -500">Profit / Loss</div>
-            <div className={`stat-value text-2xl mt-1 ${totals.balance >= 0 ? 'text-[var(--primary-color)]' : 'text-warning'}`}>
-              {totals.balance >= 0 ? '+' : ''}SAR {totals.balance.toLocaleString()}
+      {/* --- 1. HEADER CARD --- */}
+      <div className="bg-base-100 rounded-lg shadow-sm border border-base-200 p-4 md:p-6 mb-6">
+        <div className="flex flex-col md:flex-row justify-between gap-6">
+          <div className="flex flex-col justify-center md:justify-start">
+            <div className="flex items-center gap-2 mb-2">
+              <span className="badge badge-ghost badge-sm text-xs font-mono opacity-70">Started: {new Date(project.startDate).toLocaleDateString()}</span>
+              <span className={`badge badge-sm text-xs text-white ${totals.balance >= 0 ? 'badge-success' : 'badge-warning'}`}>
+                {totals.balance >= 0 ? 'Profitable' : 'Deficit'}
+              </span>
             </div>
-             <div className='stat-desc text-xs '>Net Profit / Loss</div>
+            <h2 className="text-xl md:text-3xl font-bold text-base-content uppercase leading-tight">{project.name}</h2>
+            <div className="flex flex-wrap gap-x-4 gap-y-2 mt-3 text-xs md:text-sm text-base-content/70">
+               <span className="flex items-center gap-1 bg-base-200 px-2 py-1 rounded-md"><User size={14}/> {project.clientName}</span>
+               <span className="flex items-center gap-1 bg-base-200 px-2 py-1 rounded-md"><MapPin size={14}/> {project.location || 'N/A'}</span>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 w-full md:w-auto">
+            <div className="p-3 bg-base-200/50 rounded-lg border border-base-200 text-center">
+               <p className="text-[10px] uppercase font-bold text-base-content/50">Budget</p>
+               <p className="text-sm md:text-lg font-bold text-base-content truncate">{project.estimatedBudget?.toLocaleString()}</p>
+            </div>
+            <div className="p-3 bg-base-200/50 rounded-lg border border-base-200 text-center">
+               <p className="text-[10px] uppercase font-bold text-base-content/50">Income</p>
+               <p className="text-sm md:text-lg font-bold text-success truncate">+{totals.totalIncome.toLocaleString()}</p>
+            </div>
+            <div className="p-3 bg-base-200/50 rounded-lg border border-base-200 text-center">
+               <p className="text-[10px] uppercase font-bold text-base-content/50">Expense</p>
+               <p className="text-sm md:text-lg font-bold text-error truncate">-{totals.totalExpenses.toLocaleString()}</p>
+            </div>
+            <div className="p-3 rounded-lg border text-center" style={{ backgroundColor: 'color-mix(in srgb, var(--primary-color) 8%, transparent)', borderColor: 'var(--primary-color)' }}>
+               <p className="text-[10px] uppercase font-bold" style={primaryText}>Net</p>
+               <p className="text-sm md:text-lg font-bold truncate" style={primaryText}>{totals.balance.toLocaleString()}</p>
+            </div>
           </div>
         </div>
-        <div className="stats shadow bg-base-100 border border-base-200">
-          <div className="stat">
-            <div className="stat-title text-xs font-medium uppercase tracking-wider   -500">Budget Used</div>
-            <div className="stat-value text-2xl text-[var(--primary-color)] mt-1">{budgetUtilization.toFixed(0)}%</div>
-            <progress className="progress progress-primary w-full mt-2" value={project.progress} max="100"></progress>
+        
+        <div className="mt-6">
+          <div className="flex justify-between text-xs mb-1 opacity-70">
+            <span>Budget Utilization</span>
+            <span>{project.estimatedBudget ? ((totals.totalExpenses / project.estimatedBudget) * 100).toFixed(1) : 0}%</span>
           </div>
+          <progress className="progress w-full h-2" value={totals.totalExpenses} max={project.estimatedBudget || 100} style={{ color: 'var(--primary-color)' }}></progress>
         </div>
       </div>
 
-      {/* --- CONTROLS SECTION --- */}
-      <div className="w-full bg-base-100 rounded-xl shadow-sm border border-base-200 p-4 mb-6">
-        <div className="flex flex-col md:flex-row items-center justify-between gap-4">
-          <div className="bg-base-200 p-1 rounded-lg flex items-center self-start md:self-auto w-full md:w-auto overflow-x-auto no-scrollbar">
-            {tabs.map((tab) => {
-              const Icon = tab.icon;
-              return (
-                <button
-                  key={tab.name}
-                  onClick={() => handleTabChange(tab.name)}
-                  className={`
-                    flex items-center gap-2 px-4 py-2 rounded-md text-xs md:text-sm cursor-pointer font-medium transition-all duration-200 whitespace-nowrap flex-1 md:flex-none justify-center
-                    ${activeTab === tab.name 
-                      ? 'bg-white text-[var(--primary-color)] shadow-sm' 
-                      : '  -500 hover:  -700 hover:bg-base-300'
-                    }
-                  `}
+      {/* --- 2. TABS & CONTROLS --- */}
+      <div className="flex flex-col gap-6">
+        <div className="flex flex-col md:flex-row justify-between items-center gap-4">
+          <div className="w-full md:w-auto overflow-x-auto pb-1 hide-scrollbar">
+            <div className="tabs tabs-boxed bg-base-100 p-1 border border-base-200 w-max md:w-fit flex-nowrap">
+              {['Overview', 'Expenses', 'Income'].map((tab) => (
+                <button 
+                  key={tab}
+                  onClick={() => handleTabChange(tab)} 
+                  className={`tab h-10 px-4 md:px-6 text-sm ${activeTab === tab ? 'tab-active font-bold text-white' : 'text-base-content/70'}`} 
+                  style={activeTab === tab ? primaryBg : {}}
                 >
-                  <Icon size={16} />
-                  {tab.name}
+                  {tab === 'Overview' && <LayoutGrid size={16} className="mr-2"/>}
+                  {tab === 'Expenses' && <Receipt size={16} className="mr-2"/>}
+                  {tab === 'Income' && <Wallet size={16} className="mr-2"/>}
+                  {tab}
                 </button>
-              );
-            })}
+              ))}
+            </div>
           </div>
-          <div className="flex flex-col sm:flex-row items-center gap-3 w-full md:w-auto">
-            <DashboardSearch 
-              placeholder="Search transactions..."
-              value={searchTerm}
-              onChange={setSearchTerm}
-            />
-            <Link href={`/Dashboard/Projects/${projectId}/Summary`} className="w-full sm:w-auto">
-              <button className="btn  cursor-pointer btn-sm bg-[var(--primary-color)] text-white rounded-lg border-none w-full shadow-sm hover:brightness-110">
-                <BarChart3 className="w-4 h-4 mr-1" />
-                Report
-              </button>
-            </Link>
+
+          <div className="flex gap-2 w-full md:w-auto">
+             <Link href={`/Dashboard/Projects/${projectId}/Summary`}>
+                <button className="btn btn-sm text-white border-none shadow-md" style={primaryBg}><BarChart3 size={16}/> Report</button>
+             </Link>
           </div>
         </div>
+
+        {/* --- 3. TAB CONTENT --- */}
+        
+        {/* OVERVIEW TAB */}
+        {activeTab === 'Overview' && (
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 animate-in fade-in slide-in-from-bottom-2">
+            <div className="lg:col-span-2 bg-base-100 border border-base-200 rounded-lg overflow-hidden shadow-sm">
+               <div className="p-4 border-b border-base-200 bg-base-200/30"><h3 className="font-bold text-base-content flex items-center gap-2"><TrendingUp size={18}/> Recent Activity</h3></div>
+               <div className="overflow-x-auto">
+                 <table className="table w-full min-w-[500px]">
+                   <thead className="bg-base-200/50 text-xs uppercase text-base-content/60"><tr><th>Date</th><th>Description</th><th>Type</th><th className="text-right">Amount</th></tr></thead>
+                   <tbody>
+                     {recentActivity.length > 0 ? recentActivity.map((item, idx) => (
+                       <tr key={idx} className="hover border-base-200 text-sm">
+                         <td className="opacity-70">{new Date(item.date).toLocaleDateString()}</td>
+                         <td className="font-medium">{item.description}</td>
+                         <td><span className={`badge badge-sm badge-outline ${item.type === 'expense' ? 'badge-error' : 'badge-success'}`}>{item.type}</span></td>
+                         <td className={`text-right font-bold font-mono ${item.type === 'expense' ? 'text-error' : 'text-success'}`}>{item.type === 'expense' ? '-' : '+'} {item.amount.toLocaleString()}</td>
+                       </tr>
+                     )) : <tr><td colSpan={4} className="text-center py-10 opacity-50">No activity yet</td></tr>}
+                   </tbody>
+                 </table>
+               </div>
+            </div>
+
+            <div className="lg:col-span-1 space-y-6">
+               <div className="bg-base-100 p-5 rounded-lg border border-base-200 shadow-sm">
+                  <h3 className="font-bold mb-4 flex items-center gap-2"><PieChart size={18}/> Financial Health</h3>
+                  <div className="space-y-4 text-sm">
+                    <div className="flex justify-between items-center p-2 bg-base-200/50 rounded"><span className="opacity-70">Expense Ratio</span><span className="font-bold">{project.estimatedBudget ? ((totals.totalExpenses / project.estimatedBudget) * 100).toFixed(1) : 0}%</span></div>
+                    <div className="flex justify-between items-center p-2 bg-base-200/50 rounded"><span className="opacity-70">Remaining Budget</span><span className="font-bold">{(project.estimatedBudget - totals.totalExpenses).toLocaleString()}</span></div>
+                  </div>
+               </div>
+            </div>
+          </div>
+        )}
+
+        {/* EXPENSES / INCOME TABS */}
+        {(activeTab === 'Expenses' || activeTab === 'Income') && (
+          <div className="bg-base-100 border border-base-200 rounded-lg overflow-hidden shadow-sm animate-in fade-in slide-in-from-bottom-2">
+             <div className="p-4 border-b border-base-200 bg-base-200/30 flex justify-between items-center">
+               <h3 className="font-bold text-base-content flex items-center gap-2 text-sm md:text-base">
+                 {activeTab === 'Expenses' ? <><Receipt size={18}/> Project Expenses</> : <><Wallet size={18}/> Project Income</>}
+               </h3>
+               {/* --- MOVED BUTTONS HERE --- */}
+               {activeTab === 'Expenses' && (
+                 <button onClick={() => setIsAddExpenseOpen(true)} className="btn btn-sm btn-error text-white shadow-md text-xs md:text-sm">
+                   <Plus size={16}/> Add Expense
+                 </button>
+               )}
+               {activeTab === 'Income' && (
+                 <button onClick={() => setIsAddIncomeOpen(true)} className="btn btn-sm btn-success text-white shadow-md text-xs md:text-sm">
+                   <Plus size={16}/> Add Income
+                 </button>
+               )}
+             </div>
+
+             <div className="overflow-x-auto w-full max-h-[600px] overflow-y-auto">
+               <table className="table w-full min-w-[700px] table-pin-rows">
+                 <thead className="bg-base-200/90 backdrop-blur text-xs uppercase z-10">
+                   <tr><th>Date</th><th>Description</th><th className="text-right">Amount (SAR)</th><th className="text-center w-16">Action</th></tr>
+                 </thead>
+                 <tbody>
+                   {filteredData.length > 0 ? filteredData.map((item, idx) => (
+                     <tr key={item._id || idx} className="hover border-base-200 text-sm group">
+                       <td className="w-32 font-mono text-xs opacity-70">{new Date(item.date).toLocaleDateString()}</td>
+                       <td className="font-medium">{item.description}</td>
+                       <td className={`text-right font-bold font-mono ${activeTab === 'Expenses' ? 'text-error' : 'text-success'}`}>{activeTab === 'Expenses' ? '-' : '+'} {item.amount.toLocaleString()}</td>
+                       <td className="text-center"><button onClick={() => setDeleteModal({ isOpen: true, id: item._id, type: activeTab === 'Expenses' ? 'expense' : 'income' })} className="btn btn-ghost btn-xs text-error opacity-50 group-hover:opacity-100 transition-opacity"><Trash2 size={14}/></button></td>
+                     </tr>
+                   )) : (
+                     <tr>
+                       <td colSpan={4} className="text-center py-16">
+                         <div className="flex flex-col items-center opacity-40">
+                           <FileText size={48} className="mb-2"/>
+                           <p>No records found</p>
+                         </div>
+                       </td>
+                     </tr>
+                   )}
+                 </tbody>
+               </table>
+             </div>
+          </div>
+        )}
       </div>
 
-      {/* --- CONTENT AREA --- */}
-      
-      {activeTab === 'Overview' && (
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 animate-in fade-in slide-in-from-bottom-2 duration-300">
-          <div className="lg:col-span-1 space-y-6">
-            <div className="bg-base-100 p-4 rounded-xl shadow-sm border border-base-200">
-              <h3 className="font-semibold mb-6 text-md ">Project Details</h3>
-              <div className="space-y-4">
-                <div className="flex justify-between border-b border-base-200 pb-2"><span className="text-xs   -500 uppercase font-medium">Name</span><span className="font-medium text-sm">{project.name}</span></div>
-                <div className="flex justify-between border-b border-base-200 pb-2"><span className="text-xs   -500 uppercase font-medium">Client</span><span className="font-medium text-sm">{project.clientName}</span></div>
-                <div className="flex justify-between border-b border-base-200 pb-2"><span className="text-xs   -500 uppercase font-medium">Location</span><span className="font-medium text-sm">{project.location}</span></div>
-                <div className="flex justify-between border-b border-base-200 pb-2"><span className="text-xs   -500 uppercase font-medium">Start Date</span><span className="font-medium text-sm">{new Date(project.startDate).toLocaleDateString()}</span></div>
-                <div className="flex justify-between pt-2"><span className="text-xs   -500 uppercase font-medium">Budget</span><span className="font-bold text-sm text-[var(--primary-color)]">SAR {project.estimatedBudget?.toLocaleString()}</span></div>
-              </div>
-            </div>
+      {/* --- MODAL 1: ADD EXPENSE --- */}
+      <dialog className={`modal modal-bottom sm:modal-middle ${isAddExpenseOpen ? 'modal-open' : ''}`}>
+        <div className="modal-box bg-base-100 p-0 w-full sm:w-11/12 max-w-md shadow-2xl flex flex-col max-h-[90vh]">
+          <div className="bg-base-200/50 p-5 border-b border-base-200 flex justify-between items-center flex-none">
+            <div><h3 className="font-bold text-lg text-base-content flex items-center gap-2"><div className="p-2 bg-error/10 rounded-full text-error"><Receipt size={20}/></div> New Expense</h3><p className="text-xs text-base-content/60 mt-1 pl-11">Record a new project cost</p></div>
+            <button onClick={() => setIsAddExpenseOpen(false)} className="btn btn-sm btn-circle btn-ghost hover:bg-base-300"><X size={18}/></button>
           </div>
-          <div className="lg:col-span-2">
-            <ActivityTable transactions={getActivityData()} />
+          <div className="flex-1 overflow-y-auto">
+            <form onSubmit={handleAddExpense} className="p-6 space-y-5">
+              <div className="form-control"><label className="label text-xs font-bold text-base-content/70 pb-1">AMOUNT</label><div className="relative"><div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none"><span className="text-base-content/40 font-bold text-sm">SAR</span></div><input type="number" step="0.01" min="0" className="input input-bordered w-full pl-12 focus:outline-none focus:border-error text-lg font-mono font-bold text-error bg-base-100" placeholder="0.00" required value={expenseForm.amount} onChange={e => setExpenseForm({...expenseForm, amount: e.target.value})} /></div></div>
+              <div className="form-control"><label className="label text-xs font-bold text-base-content/70 pb-1">DATE</label><div className="relative"><div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-base-content/40"><Calendar size={16}/></div><input type="date" className="input input-bordered w-full pl-10 focus:outline-none focus:border-error bg-base-100 text-sm" required value={expenseForm.date} onChange={e => setExpenseForm({...expenseForm, date: e.target.value})} /></div></div>
+              <div className="form-control"><label className="label text-xs font-bold text-base-content/70 pb-1">DESCRIPTION</label><div className="relative"><div className="absolute top-3 left-3 pointer-events-none text-base-content/40"><FileText size={16}/></div><textarea className="textarea textarea-bordered w-full pl-10 h-24 focus:outline-none focus:border-error bg-base-100 text-sm leading-relaxed" placeholder="What was this expense for?" required value={expenseForm.description} onChange={e => setExpenseForm({...expenseForm, description: e.target.value})}></textarea></div><div className="flex flex-wrap gap-2 mt-3">{expenseTags.map(tag => (<button key={tag} type="button" onClick={() => appendDescription(tag, 'expense')} className="badge badge-ghost badge-sm hover:bg-base-300 cursor-pointer border-base-300 text-xs py-2 h-auto">{tag}</button>))}</div></div>
+              <div className="pt-2 pb-2"><button type="submit" disabled={isSubmitting} className="btn btn-error w-full text-white shadow-lg shadow-error/20">{isSubmitting ? <Loader2 className="animate-spin" /> : 'Save Expense Record'}</button></div>
+            </form>
           </div>
         </div>
-      )}
+        <form method="dialog" className="modal-backdrop"><button onClick={() => setIsAddExpenseOpen(false)}>close</button></form>
+      </dialog>
 
-      {activeTab === 'Expenses' && (
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 animate-in fade-in slide-in-from-bottom-2 duration-300 items-start">
-          <div className="lg:col-span-1">
-            <div className="bg-base-100 rounded-xl shadow-sm border border-base-200 p-5 sticky top-6">
-              <h3 className="font-semibold mb-4 flex items-center gap-2">
-                <div className="p-1.5 bg-error/10 rounded-md"><Plus size={16} className="text-error" /></div>
-                Add Expense
-              </h3>
-              <div className="space-y-4">
-                <div className="w-full">
-                  <label className="label pt-0"><span className="label-text text-xs font-medium">Date</span></label>
-                  <input 
-                    type="date" 
-                    className={`input input-sm input-bordered w-full ${expenseErrors.date ? 'input-error' : ''}`}
-                    value={expenseForm.date} 
-                    onChange={(e) => {
-                      setExpenseForm({...expenseForm, date: e.target.value});
-                      if(expenseErrors.date) setExpenseErrors({...expenseErrors, date: ''});
-                    }} 
-                  />
-                  {expenseErrors.date && <span className="text-error text-xs mt-1 block">{expenseErrors.date}</span>}
-                </div>
-                
-                <div className="w-full">
-                  <label className="label pt-0"><span className="label-text text-xs font-medium">Description</span></label>
-                  <input 
-                    type="text" 
-                    placeholder="e.g., Cement bags" 
-                    className={`input input-sm input-bordered w-full ${expenseErrors.description ? 'input-error' : ''}`}
-                    value={expenseForm.description} 
-                    onChange={(e) => {
-                      setExpenseForm({...expenseForm, description: e.target.value});
-                      if(expenseErrors.description) setExpenseErrors({...expenseErrors, description: ''});
-                    }} 
-                  />
-                  {expenseErrors.description && <span className="text-error text-xs mt-1 block">{expenseErrors.description}</span>}
-                </div>
-                
-                <div className="w-full">
-                  <label className="label pt-0"><span className="label-text text-xs font-medium">Amount (SAR)</span></label>
-                  <input 
-                    type="number" 
-                    step="0.01" 
-                    placeholder="0.00" 
-                    min="0" 
-                    className={`input input-sm input-bordered w-full font-mono ${expenseErrors.amount ? 'input-error' : ''}`}
-                    value={expenseForm.amount} 
-                    onChange={(e) => {
-                      setExpenseForm({...expenseForm, amount: e.target.value});
-                      if(expenseErrors.amount) setExpenseErrors({...expenseErrors, amount: ''});
-                    }} 
-                  />
-                  {expenseErrors.amount && <span className="text-error text-xs mt-1 block">{expenseErrors.amount}</span>}
-                </div>
-
-                <button 
-                  onClick={handleAddExpense} 
-                  disabled={isAddingExpense}
-                  className="btn btn-sm bg-error text-white w-full hover:bg-error/90 mt-2 shadow-sm flex items-center justify-center gap-2"
-                >
-                  {isAddingExpense ? (
-                    <>
-                      <Loader2 size={16} className="animate-spin" />
-                      Adding...
-                    </>
-                  ) : (
-                    'Add Expense'
-                  )}
-                </button>
-              </div>
-            </div>
+      {/* --- MODAL 2: ADD INCOME --- */}
+      <dialog className={`modal modal-bottom sm:modal-middle ${isAddIncomeOpen ? 'modal-open' : ''}`}>
+        <div className="modal-box bg-base-100 p-0 w-full sm:w-11/12 max-w-md shadow-2xl flex flex-col max-h-[90vh]">
+          <div className="bg-base-200/50 p-5 border-b border-base-200 flex justify-between items-center flex-none">
+            <div><h3 className="font-bold text-lg text-base-content flex items-center gap-2"><div className="p-2 bg-success/10 rounded-full text-success"><Banknote size={20}/></div> New Income</h3><p className="text-xs text-base-content/60 mt-1 pl-11">Record a payment received</p></div>
+            <button onClick={() => setIsAddIncomeOpen(false)} className="btn btn-sm btn-circle btn-ghost hover:bg-base-300"><X size={18}/></button>
           </div>
-          <div className="lg:col-span-2 h-full">
-            <TransactionTable 
-                data={getFilteredExpenses()} 
-                type="expense" 
-                onDelete={(id) => initiateDelete(id, 'expense')} 
-                total={totals.totalExpenses} 
-            />
+          <div className="flex-1 overflow-y-auto">
+            <form onSubmit={handleAddIncome} className="p-6 space-y-5">
+              <div className="form-control"><label className="label text-xs font-bold text-base-content/70 pb-1">AMOUNT</label><div className="relative"><div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none"><span className="text-base-content/40 font-bold text-sm">SAR</span></div><input type="number" step="0.01" min="0" className="input input-bordered w-full pl-12 focus:outline-none focus:border-success text-lg font-mono font-bold text-success bg-base-100" placeholder="0.00" required value={incomeForm.amount} onChange={e => setIncomeForm({...incomeForm, amount: e.target.value})} /></div></div>
+              <div className="form-control"><label className="label text-xs font-bold text-base-content/70 pb-1">DATE</label><div className="relative"><div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-base-content/40"><Calendar size={16}/></div><input type="date" className="input input-bordered w-full pl-10 focus:outline-none focus:border-success bg-base-100 text-sm" required value={incomeForm.date} onChange={e => setIncomeForm({...incomeForm, date: e.target.value})} /></div></div>
+              <div className="form-control"><label className="label text-xs font-bold text-base-content/70 pb-1">DESCRIPTION</label><div className="relative"><div className="absolute top-3 left-3 pointer-events-none text-base-content/40"><Tag size={16}/></div><textarea className="textarea textarea-bordered w-full pl-10 h-24 focus:outline-none focus:border-success bg-base-100 text-sm leading-relaxed" placeholder="Source of funds..." required value={incomeForm.description} onChange={e => setIncomeForm({...incomeForm, description: e.target.value})}></textarea></div><div className="flex flex-wrap gap-2 mt-3">{incomeTags.map(tag => (<button key={tag} type="button" onClick={() => appendDescription(tag, 'income')} className="badge badge-ghost badge-sm hover:bg-base-300 cursor-pointer border-base-300 text-xs py-2 h-auto">{tag}</button>))}</div></div>
+              <div className="pt-2 pb-2"><button type="submit" disabled={isSubmitting} className="btn btn-success w-full text-white shadow-lg shadow-success/20">{isSubmitting ? <Loader2 className="animate-spin" /> : 'Save Income Record'}</button></div>
+            </form>
           </div>
         </div>
-      )}
+        <form method="dialog" className="modal-backdrop"><button onClick={() => setIsAddIncomeOpen(false)}>close</button></form>
+      </dialog>
 
-      {activeTab === 'Income' && (
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 animate-in fade-in slide-in-from-bottom-2 duration-300 items-start">
-          <div className="lg:col-span-1">
-            <div className="bg-base-100 rounded-xl shadow-sm border border-base-200 p-5 sticky top-6">
-              <h3 className="font-semibold mb-4 flex items-center gap-2">
-                <div className="p-1.5 bg-success/10 rounded-md"><Plus size={16} className="text-success" /></div>
-                Record Income
-              </h3>
-              <div className="space-y-4">
-                <div className="w-full">
-                  <label className="label pt-0"><span className="label-text text-xs font-medium">Date</span></label>
-                  <input 
-                    type="date" 
-                    className={`input input-sm input-bordered w-full ${incomeErrors.date ? 'input-error' : ''}`}
-                    value={incomeForm.date} 
-                    onChange={(e) => {
-                      setIncomeForm({...incomeForm, date: e.target.value});
-                      if(incomeErrors.date) setIncomeErrors({...incomeErrors, date: ''});
-                    }} 
-                  />
-                  {incomeErrors.date && <span className="text-error text-xs mt-1 block">{incomeErrors.date}</span>}
-                </div>
-                
-                <div className="w-full">
-                  <label className="label pt-0"><span className="label-text text-xs font-medium">Description</span></label>
-                  <input 
-                    type="text" 
-                    placeholder="e.g., Client payment" 
-                    className={`input input-sm input-bordered w-full ${incomeErrors.description ? 'input-error' : ''}`}
-                    value={incomeForm.description} 
-                    onChange={(e) => {
-                      setIncomeForm({...incomeForm, description: e.target.value});
-                      if(incomeErrors.description) setIncomeErrors({...incomeErrors, description: ''});
-                    }} 
-                  />
-                  {incomeErrors.description && <span className="text-error text-xs mt-1 block">{incomeErrors.description}</span>}
-                </div>
-                
-                <div className="w-full">
-                  <label className="label pt-0"><span className="label-text text-xs font-medium">Amount (SAR)</span></label>
-                  <input 
-                    type="number" 
-                    step="0.01" 
-                    placeholder="0.00" 
-                    min="0" 
-                    className={`input input-sm input-bordered w-full font-mono ${incomeErrors.amount ? 'input-error' : ''}`}
-                    value={incomeForm.amount} 
-                    onChange={(e) => {
-                      setIncomeForm({...incomeForm, amount: e.target.value});
-                      if(incomeErrors.amount) setIncomeErrors({...incomeErrors, amount: ''});
-                    }} 
-                  />
-                  {incomeErrors.amount && <span className="text-error text-xs mt-1 block">{incomeErrors.amount}</span>}
-                </div>
-
-                <button 
-                  onClick={handleAddIncome} 
-                  disabled={isAddingIncome}
-                  className="btn btn-sm bg-success text-white w-full hover:bg-success/90 mt-2 shadow-sm flex items-center justify-center gap-2"
-                >
-                   {isAddingIncome ? (
-                    <>
-                      <Loader2 size={16} className="animate-spin" />
-                      Adding...
-                    </>
-                  ) : (
-                    'Add Income'
-                  )}
-                </button>
-              </div>
-            </div>
+      {/* --- MODAL 3: DELETE CONFIRMATION --- */}
+      <dialog className={`modal modal-bottom sm:modal-middle ${deleteModal.isOpen ? 'modal-open' : ''}`}>
+        <div className="modal-box bg-base-100 p-0 overflow-hidden w-full sm:w-11/12 max-w-sm">
+          <div className="p-6 md:p-8 text-center bg-base-100">
+            <div className="w-16 h-16 bg-error/10 text-error rounded-full flex items-center justify-center mx-auto mb-4 animate-pulse"><AlertTriangle size={32} /></div>
+            <h3 className="text-lg md:text-xl font-bold text-base-content">Delete Record?</h3>
+            <p className="text-sm text-base-content/70 mt-3 leading-relaxed">This will remove the transaction permanently. This cannot be undone.</p>
           </div>
-          <div className="lg:col-span-2 h-full">
-            <TransactionTable 
-                data={getFilteredIncome()} 
-                type="income" 
-                onDelete={(id) => initiateDelete(id, 'income')} 
-                total={totals.totalIncome} 
-            />
+          <div className="flex p-4 gap-3 bg-base-200/50 border-t border-base-200">
+            <button className="btn btn-ghost text-base-content/70 flex-1 h-11 rounded-md" onClick={() => setDeleteModal({ ...deleteModal, isOpen: false })}>Cancel</button>
+            <button className="btn btn-error text-white flex-1 h-11 shadow-lg rounded-md" disabled={isDeleting} onClick={executeDelete}>{isDeleting ? <Loader2 className="animate-spin"/> : 'Yes, Delete'}</button>
           </div>
         </div>
-      )}
+        <form method="dialog" className="modal-backdrop"><button onClick={() => setDeleteModal({ ...deleteModal, isOpen: false })}>close</button></form>
+      </dialog>
     </>
   );
 }
