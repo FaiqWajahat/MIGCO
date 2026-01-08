@@ -51,7 +51,7 @@ export default function ProjectsPage() {
 
   // Data States
   const [projects, setProjects] = useState([]);
-  const [isLoading, setIsLoading] = useState(true);
+  const [isLoading, setIsLoading] = useState(false);
   
   // Filter States
   const [searchTerm, setSearchTerm] = useState('');
@@ -148,9 +148,9 @@ export default function ProjectsPage() {
     completed: projects.filter(p => p.status === 'completed').length
   };
 
-  if (isLoading) return <CustomLoader text={"Loading Projects..."} />;
+  if (isLoading) return <CustomLoader text={"Loading Projects..."} />
 
-  return (
+ else return (
     <>
       <DashboardPageHeader breadData={breadData} heading="Projects" />
 
@@ -369,7 +369,7 @@ export default function ProjectsPage() {
                   onClick={() => router.push(`/Dashboard/Projects/${selectedProject._id || selectedProject.id}/Dashboard`)}
                   className="btn bg-[var(--primary-color)] text-white rounded-sm flex-1 gap-2 shadow-sm hover:bg-[var(--primary-color)]/90"
                >
-                  <LayoutDashboard className="h-4 w-4" /> Overview
+                  <LayoutDashboard className="h-4 w-4" /> Ledger
                </button>
                <button 
                   onClick={() => router.push(`/Dashboard/Projects/Edit/${selectedProject._id || selectedProject.id}`)}

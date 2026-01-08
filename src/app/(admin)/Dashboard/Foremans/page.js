@@ -23,8 +23,8 @@ const EmployeeRecord = () => {
 
   const breadData = [
     { name: "Dashboard", href: "/Dashboard" },
-    { name: "Projects", href: "/Dashboard/Projects" },
-    { name: "Project Foremans", href: "/Dashboard/Projects/Foremans" },
+    { name: "Foremans", href: "/Dashboard/Foremans" },
+    
   ];
 
   // Fetch employees
@@ -45,7 +45,8 @@ const EmployeeRecord = () => {
         return;
       }
 
-      setEmployees(response.data.employees);
+      const formans = response.data.employees.filter(emp => emp.role === 'Foreman');
+      setEmployees(formans);
     } catch (error) {
       console.log("error of fetching employee:", error);
       errorToast(error.response?.data?.message || "Something went wrong");
@@ -74,7 +75,7 @@ const EmployeeRecord = () => {
 
   // Navigate to expense details - FIXED: Using iqamaNumber
   const handleViewExpenses = (employeeId) => {
-    router.push(`/Dashboard/Projects/Foremans/${employeeId}/AssignProjects`);
+    router.push(`/Dashboard/Foremans/${employeeId}/AssignProjects`);
   };
 
   if (isLoading) {
@@ -131,7 +132,7 @@ const EmployeeRecord = () => {
           <div className="flex items-center gap-4">
             <div className="w-full md:w-auto justify-center md:justify-start flex">
             <DashboardSearch 
-              placeholder="Search Employee" 
+              placeholder="Search Foreman" 
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
             />

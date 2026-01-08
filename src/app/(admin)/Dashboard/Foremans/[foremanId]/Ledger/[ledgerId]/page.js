@@ -9,18 +9,9 @@ import {
   ArrowLeft, Wallet, FileText, Calendar, 
   TrendingUp, Plus, X, Banknote, Receipt, Trash2, AlertTriangle, MapPin, Search 
 } from 'lucide-react';
+import CustomLoader from '@/Components/CustomLoader';
 
-// --- Helper: Skeleton Loader Component ---
-const LedgerSkeleton = () => (
-  <div className="animate-pulse space-y-6">
-    <div className="h-48 bg-base-200 rounded-lg w-full"></div>
-    <div className="flex gap-4">
-      <div className="h-10 bg-base-200 rounded w-32"></div>
-      <div className="h-10 bg-base-200 rounded w-32"></div>
-    </div>
-    <div className="h-64 bg-base-200 rounded-lg w-full"></div>
-  </div>
-);
+
 
 const ForemanLedgerPage = () => {
   const { foremanId, ledgerId } = useParams();
@@ -57,9 +48,9 @@ const ForemanLedgerPage = () => {
   
   const breadData = [
     { name: "Dashboard", href: "/Dashboard" },
-    { name: "Foremans", href: `/Dashboard/Projects/Foremans` },
-    { name: "Assigned", href: `/Dashboard/Projects/Foremans/${foremanId}` },
-    { name: "Ledger", href: "#" },
+    { name: "Foremans", href: "/Dashboard/Foremans" },
+    { name: "Assigned", href: `/Dashboard/Foremans/${foremanId}/AssignProjects` },
+    { name: "Ledger", href: `/Dashboard/Foremans/${foremanId}/Ledger/${ledgerId}` }
   ];
 
   const categories = ['Material', 'Labor', 'Fuel', 'Transport', 'Food', 'Other'];
@@ -188,7 +179,7 @@ const ForemanLedgerPage = () => {
     return Array.from(map.values()).sort((a, b) => b.month.localeCompare(a.month));
   }, [ledgerData]);
 
-  if (isLoading) return <><DashboardPageHeader breadData={breadData} heading="Project Ledger" /><LedgerSkeleton /></>;
+  if (isLoading) return <CustomLoader text='loading foreman ledger'/>;
   if (!ledgerData) return <div className="p-10 text-center text-base-content/50">Record not found</div>;
 
   return (
@@ -357,7 +348,7 @@ const ForemanLedgerPage = () => {
               <div className="form-control"><label className="label-text text-xs font-bold mb-1 text-base-content/70">Inv No <span className="text-error">*</span></label><input type="text" required className="input input-bordered w-full bg-base-100" placeholder="#INV-001" value={invoiceForm.invoiceNo} onChange={e => setInvoiceForm({...invoiceForm, invoiceNo: e.target.value})}/></div>
             </div>
             <div className="form-control"><label className="label-text text-xs font-bold mb-1 text-base-content/70">Remarks</label><textarea className="textarea textarea-bordered h-24 bg-base-100 w-full" placeholder="Details..." value={invoiceForm.remarks} onChange={e => setInvoiceForm({...invoiceForm, remarks: e.target.value})}></textarea></div>
-            <button type="submit" disabled={isSubmitting} className="btn btn-error text-white w-full">{isSubmitting ? <span className="loading loading-spinner"/> : "Save Expense"}</button>
+            <button type="submit" disabled={isSubmitting} className="btn btn-error text-white w-full">{isSubmitting ? <span className="loading loading-spinner"/> : "Save Invoice"}</button>
           </form>
         </div>
         <form method="dialog" className="modal-backdrop"><button onClick={() => setIsInvoiceModalOpen(false)}>close</button></form>

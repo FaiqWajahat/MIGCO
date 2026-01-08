@@ -29,7 +29,7 @@ const mainMenu = [
     icon: Warehouse,
     children: [
       { title: "All Projects", href: "/Dashboard/Projects" },
-      { title: "Project Foremans", href: "/Dashboard/Projects/Foremans" },
+    
       { title: "Add Project", href: "/Dashboard/Projects/Add" },
     ]
   },
@@ -58,19 +58,26 @@ const mainMenu = [
       { title: "History", href: "/Dashboard/Attendance" },
     ],
   },
-  {
-    title: "Salary",
-    icon: Wallet,
-    href: "/Dashboard/Salary",
-  },
-  {
+   {
     title: "Quotations",
     icon: ShieldCheck,
     children: [
       { title: "All Quotations", href: "/Dashboard/Quotations" },
       { title: "Add Quotation", href: "/Dashboard/Quotations/Add" },
     ],
-  }
+  },
+  {
+    title:"Foremans",
+    icon: Users,
+    href: "/Dashboard/Foremans",
+  },
+  {
+    title: "Salary",
+    icon: Wallet,
+    href: "/Dashboard/Salary",
+  },
+ 
+  
 ];
 
 const accountMenu = [

@@ -6,7 +6,7 @@ import bcrypt from "bcryptjs";
 export async function POST(request) {
   try {
     await connectDB();
-    const { name, email, password } = await request.json();
+    const { name, email, password, role } = await request.json();
       
     const existingUser = await User.findOne({ email });
     if (existingUser) {
@@ -26,6 +26,7 @@ export async function POST(request) {
     const newUser = new User({
       name,
       email,
+      role,
       password: hashedPassword, // Store the HASHED password, not the plain one
     });
 

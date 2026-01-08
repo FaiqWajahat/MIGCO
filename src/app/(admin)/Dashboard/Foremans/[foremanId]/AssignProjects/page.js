@@ -42,8 +42,8 @@ const ForemanProjectsPage = () => {
 
   const breadData = [
     { name: "Dashboard", href: "/Dashboard" },
-    { name: "Project Foremans", href: "/Dashboard/Projects/Foremans" },
-    { name: "Assigned Projects", href: "#" },
+    { name: "Foremans", href: "/Dashboard/Foremans" },
+    { name: "Assigned Projects", href: `/Dashboard/Foremans/${foremanId}/AssignProjects` }
   ];
 
   useEffect(() => {
@@ -198,7 +198,7 @@ const ForemanProjectsPage = () => {
           <DashboardSearch placeholder="Search within assigned projects..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} />
         </div>
 
-        <div className="overflow-x-auto w-full md:px-4">
+        <div className="overflow-x-auto w-full md:px-4 py-4">
           {/* Added min-w to force scroll on very small screens instead of crushing content */}
           <table className="table table-zebra w-full text-base-content min-w-[600px] md:min-w-full">
             <thead className="bg-base-200/50 text-base-content/70 text-xs uppercase">
@@ -285,18 +285,19 @@ const ForemanProjectsPage = () => {
 
              {/* Footer - Buttons stack on very small screens, row on others */}
              <div className="p-4 md:p-6 flex flex-col sm:flex-row gap-3 justify-end bg-base-100 border-t border-base-200">
+              
                 <button 
-                  onClick={() => setIsDeleteConfirmOpen(true)}
-                  className="btn btn-error btn-outline flex-1 gap-2 rounded-md h-12"
-                >
-                  <Trash2 size={16}/> Unassign
-                </button>
-                <button 
-                  onClick={() => router.push(`/Dashboard/Projects/Foremans/${foremanId}/Ledger/${viewingProject._id}`)}
+                  onClick={() => router.push(`/Dashboard/Foremans/${foremanId}/Ledger/${viewingProject._id}`)}
                   style={primaryBg}
-                  className="btn text-white border-none flex-1 gap-2 rounded-md hover:brightness-90 h-12 shadow-md"
+                  className="btn text-white border-none flex-1 gap-2 rounded-sm hover:brightness-90 h-12 py-3 shadow-md"
                 >
                   <ExternalLink size={16}/> View Ledger
+                </button>
+                  <button 
+                  onClick={() => setIsDeleteConfirmOpen(true)}
+                  className="btn btn-error btn-outline flex-1 gap-2 rounded-sm py-3 h-12"
+                >
+                  <Trash2 size={16}/> Unassign
                 </button>
              </div>
           </div>

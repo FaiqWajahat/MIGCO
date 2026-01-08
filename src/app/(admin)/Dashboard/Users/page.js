@@ -1,8 +1,8 @@
 'use client'
 
 import React, { useEffect, useState } from "react";
-// 1. Import Eye and EyeOff icons
-import { Plus, Trash2, X, Loader2, Search, User, Eye, EyeOff } from "lucide-react";
+// 1. Added Shield icon to imports
+import { Plus, Trash2, X, Loader2, Search, User, Eye, EyeOff, Shield } from "lucide-react";
 import DashboardPageHeader from "@/Components/DashboardPageHeader";
 import { errorToast, sucessToast } from "@/lib/toast";
 import axios from "axios";
@@ -23,13 +23,14 @@ export default function UsersPage() {
   const [isFetchingUsers, setIsFetchingUsers] = useState(true);
   const [deleteLoading, setDeleteLoading] = useState(false);
   
-  // 2. State to handle password visibility
   const [showPassword, setShowPassword] = useState(false);
 
+  // 2. Updated formData to include role
   const [formData, setFormData] = useState({
     name: '',
     email: '',
-    password: ''
+    password: '',
+    role: 'User' // Default value
   });
   const [errors, setErrors] = useState({});
 
@@ -37,7 +38,6 @@ export default function UsersPage() {
     fetchUsers();
   }, []);
 
-  // Filter users based on search
   const filteredUsers = users.filter(user =>
     user.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
     user.email.toLowerCase().includes(searchQuery.toLowerCase())
@@ -68,6 +68,11 @@ export default function UsersPage() {
       newErrors.password = "Password is required";
     } else if (formData.password.length < 8) {
       newErrors.password = "Password must be at least 8 characters";
+    }
+    
+    // Validate Role
+    if (!formData.role) {
+      newErrors.role = "Role is required";
     }
 
     setErrors(newErrors);
@@ -116,7 +121,8 @@ export default function UsersPage() {
 
       setUsers(prev => [...prev, newUser]);
       setIsModalOpen(false);
-      setFormData({ name: '', email: '', password: '' });
+      // Reset form including role
+      setFormData({ name: '', email: '', password: '', role: 'User' });
       setErrors({});
 
     } catch (error) {
@@ -167,9 +173,9 @@ export default function UsersPage() {
   const closeAddModal = () => {
     if (!isLoading) {
       setIsModalOpen(false);
-      setFormData({ name: '', email: '', password: '' });
+      setFormData({ name: '', email: '', password: '', role: 'User' });
       setErrors({});
-      setShowPassword(false); // Reset password visibility
+      setShowPassword(false); 
     }
   };
 
@@ -192,11 +198,7 @@ export default function UsersPage() {
           <div className="stat">
             <div className="stat-title text-xs">Total Users</div>
             <div className="stat-value text-2xl">
-              {isFetchingUsers ? (
-               0
-              ) : (
-                users.length
-              )}
+              {isFetchingUsers ? 0 : users.length}
             </div>
             <div className="stat-desc">All registered users</div>
           </div>
@@ -206,15 +208,11 @@ export default function UsersPage() {
           <div className="stat">
             <div className="stat-title text-xs">New This Month</div>
             <div className="stat-value text-2xl" style={{ color: 'var(--primary-color)' }}>
-              {isFetchingUsers ? (
-                0
-              ) : (
-                users.filter(u => {
-                  const created = new Date(u.createdAt);
-                  const now = new Date();
-                  return created.getMonth() === now.getMonth() && created.getFullYear() === now.getFullYear();
-                }).length
-              )}
+              {isFetchingUsers ? 0 : users.filter(u => {
+                const created = new Date(u.createdAt);
+                const now = new Date();
+                return created.getMonth() === now.getMonth() && created.getFullYear() === now.getFullYear();
+              }).length}
             </div>
             <div className="stat-desc" style={{ color: 'var(--primary-color)' }}>Recently added</div>
           </div>
@@ -273,6 +271,8 @@ export default function UsersPage() {
                 <tr className="bg-base-200">
                   <th className="text-xs font-semibold text-base-content/70">User</th>
                   <th className="text-xs font-semibold text-base-content/70">Email</th>
+                  {/* 3. Added Role Header */}
+                  <th className="text-xs font-semibold text-base-content/70">Role</th>
                   <th className="text-xs font-semibold text-base-content/70">Joined</th>
                   <th className="text-xs font-semibold text-base-content/70 text-center">Actions</th>
                 </tr>
@@ -280,7 +280,7 @@ export default function UsersPage() {
               <tbody>
                 {filteredUsers.length === 0 ? (
                   <tr>
-                    <td colSpan="4" className="text-center py-8 text-base-content/60">
+                    <td colSpan="5" className="text-center py-8 text-base-content/60">
                       <User className="w-12 h-12 mx-auto mb-2 opacity-30" />
                       <p className="text-sm">
                         {searchQuery ? 'No users found matching your search' : 'No users found'}
@@ -307,6 +307,15 @@ export default function UsersPage() {
                         </div>
                       </td>
                       <td className="text-sm text-base-content/70">{user.email}</td>
+                      
+                      {/* 3. Added Role Column Data */}
+                      <td>
+                        <div className={`badge badge-sm gap-2 ${user.role === 'Admin' ? 'badge-primary text-white' : 'badge-ghost'}`}>
+                          {user.role === 'Admin' && <Shield size={10} />}
+                          {user.role || 'User'}
+                        </div>
+                      </td>
+
                       <td className="text-sm text-base-content/70">
                         {new Date(user.createdAt).toLocaleDateString('en-US', {
                           year: 'numeric',
@@ -404,7 +413,33 @@ export default function UsersPage() {
                 )}
               </div>
 
-              {/* Password Field (MODIFIED) */}
+              {/* 4. Role Dropdown Field (New) */}
+              <div className="form-control">
+                <label className="label py-1">
+                  <span className="label-text text-xs font-medium">
+                    Role <span className="text-error">*</span>
+                  </span>
+                </label>
+                <select
+                  name="role"
+                  value={formData.role}
+                  onChange={handleInputChange}
+                  disabled={isLoading}
+                  className={`select select-sm select-bordered w-full text-sm font-normal ${
+                    errors.role ? 'select-error' : ''
+                  }`}
+                >
+                  <option value="User">User</option>
+                  <option value="Admin">Admin</option>
+                </select>
+                {errors.role && (
+                  <label className="label py-1">
+                    <span className="label-text-alt text-error text-xs">{errors.role}</span>
+                  </label>
+                )}
+              </div>
+
+              {/* Password Field */}
               <div className="form-control">
                 <label className="label py-1">
                   <span className="label-text text-xs font-medium">
@@ -413,19 +448,16 @@ export default function UsersPage() {
                 </label>
                 <div className="relative">
                   <input
-                    // 3. Toggle type between text and password
                     type={showPassword ? "text" : "password"}
                     name="password"
                     placeholder="Min 8 characters"
                     value={formData.password}
                     onChange={handleInputChange}
                     disabled={isLoading}
-                    // Added pr-10 for right padding so text doesn't go under icon
                     className={`input input-sm input-bordered w-full text-sm pr-10 ${
                       errors.password ? 'input-error' : ''
                     }`}
                   />
-                  {/* 4. Eye Icon Button */}
                   <button
                     type="button"
                     onClick={() => setShowPassword(!showPassword)}
@@ -495,7 +527,11 @@ export default function UsersPage() {
               </div>
               <div>
                 <p className="font-semibold text-sm text-base-content">{userToDelete.name}</p>
-                <p className="text-xs text-base-content/60">{userToDelete.email}</p>
+                <div className="flex items-center gap-2">
+                   <p className="text-xs text-base-content/60">{userToDelete.email}</p>
+                   <span className="text-xs opacity-50">•</span>
+                   <p className="text-xs text-base-content/60 font-medium">{userToDelete.role || 'User'}</p>
+                </div>
               </div>
             </div>
 

@@ -36,7 +36,7 @@ const CustomDropdown = ({
         onClick={() => setOpen(!open)}
         className={`
           group flex items-center justify-between w-full md:min-w-[180px] px-4 py-2.5 text-sm font-medium 
-          bg-base-100 border rounded-lg transition-all duration-200 ease-in-out
+          bg-base-100 border rounded-sm transition-all duration-200 ease-in-out cursor-pointer
           ${open 
             ? 'border-[var(--primary-color)] ring-1 ring-[var(--primary-color)] shadow-sm' 
             : 'border-base-300 hover:border-base-content/30'
@@ -60,7 +60,7 @@ const CustomDropdown = ({
       <div 
         className={`
           absolute right-0 left-0 mt-2 origin-top-right bg-base-100 
-          border border-base-200 rounded-lg shadow-xl z-50 overflow-hidden
+          border border-base-200 rounded-sm shadow-xl z-50 overflow-hidden
           transition-all duration-200 ease-out transform
           ${open ? 'opacity-100 scale-100 translate-y-0' : 'opacity-0 scale-95 -translate-y-2 pointer-events-none'}
         `}
