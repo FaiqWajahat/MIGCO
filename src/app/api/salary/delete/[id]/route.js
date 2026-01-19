@@ -1,36 +1,32 @@
 import connectDB from "@/lib/mongodb";
 import EmployeeSalary from "@/models/employeeSalary";
-import employeeExpense from "@/models/employeeExpenses"; // Import Expense Model
+import employeeExpense from "@/models/employeeExpenses"; 
+import SalaryList from "@/models/salaryList"; // Ensure this model file exists
 import { NextResponse } from "next/server";
 
 export async function DELETE(req, { params }) {
   try {
-    // 1. Connect to Database
     await connectDB();
 
-    // 2. Extract ID
-    const { id } = await params; // Ensure params are awaited in Next.js 15+
+    // 1. Extract ID
+    const { id } = await params;
 
     if (!id) {
       return NextResponse.json({ success: false, message: "Record ID is required" }, { status: 400 });
     }
 
-    // 3. Find the record FIRST (Do not delete yet)
-    // We need to read the data inside it to know what to revert
+    // 2. Find the record FIRST
     const salaryRecord = await EmployeeSalary.findById(id);
 
     if (!salaryRecord) {
       return NextResponse.json({ success: false, message: "Salary record not found" }, { status: 404 });
     }
 
-    // ------------------------------------------------------------------
-    // 4. REVERSE EXPENSE LOGIC (Only if Salary was "Paid")
-    // ------------------------------------------------------------------
+    // 3. REVERSE EXPENSE LOGIC (Only if Salary was "Paid")
     if (salaryRecord.status === 'Paid' && salaryRecord.linkedExpenses?.length > 0) {
-      
       console.log(`Reverting ${salaryRecord.linkedExpenses.length} linked expenses...`);
 
-      // Run updates in parallel for speed
+      // Use Promise.all to await all updates, but without a transaction session
       await Promise.all(salaryRecord.linkedExpenses.map(async (link) => {
         try {
           const { expenseId, amount } = link;
@@ -42,29 +38,25 @@ export async function DELETE(req, { params }) {
           const expenseDoc = await employeeExpense.findById(expenseId);
 
           if (expenseDoc) {
-            // A. Decrease the paidAmount (Reverse the payment)
+            // A. Decrease the paidAmount
             const currentPaid = expenseDoc.paidAmount || 0;
             let newPaidTotal = currentPaid - amountToRevert;
 
-            // Safety check: Prevent negative numbers
             if (newPaidTotal < 0) newPaidTotal = 0;
 
             // Fix floating point precision
             expenseDoc.paidAmount = Math.round(newPaidTotal * 100) / 100;
 
             // B. Re-evaluate Status
-            // If nothing is paid anymore, it goes back to 'Pending'
             if (expenseDoc.paidAmount <= 0) {
               expenseDoc.status = 'Pending';
-            } 
-            // If still partially paid (but less than total), it is 'Partial'
-            else if (expenseDoc.paidAmount < expenseDoc.amount) {
+            } else if (expenseDoc.paidAmount < expenseDoc.amount) {
               expenseDoc.status = 'Partial';
             }
-            // (If it's still fully paid, we leave it as Completed, though unlikely in a revert)
+            // If still fully paid, status remains Completed
 
-            await expenseDoc.save();
-            console.log(`Reverted Expense ${expenseId}: Restored ${amountToRevert}, Status now: ${expenseDoc.status}`);
+            await expenseDoc.save(); 
+            // Note: Removed { session } argument
           }
         } catch (innerError) {
           console.error(`Failed to revert expense ${link.expenseId}:`, innerError);
@@ -72,7 +64,24 @@ export async function DELETE(req, { params }) {
       }));
     }
 
-    // 5. Now it is safe to Delete the Salary Record
+    // 4. UPDATE SALARY LIST STATUS (If applicable)
+    if (salaryRecord.salaryListId) {
+      try {
+        await SalaryList.updateOne(
+          { 
+            _id: salaryRecord.salaryListId, 
+            "employeeList.employeeId": salaryRecord.employeeId 
+          },
+          { 
+            $set: { "employeeList.$.status": "pending" } 
+          }
+        );
+      } catch (listError) {
+        console.error("Failed to update SalaryList status:", listError);
+      }
+    }
+
+    // 5. Delete the Salary Record
     await EmployeeSalary.findByIdAndDelete(id);
 
     // 6. Return Success Response

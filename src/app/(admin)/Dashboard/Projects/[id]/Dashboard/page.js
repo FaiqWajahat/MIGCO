@@ -12,6 +12,7 @@ import {
 } from 'lucide-react';
 import DashboardPageHeader from '@/Components/DashboardPageHeader';
 import { errorToast, successToast } from '@/lib/toast';
+import CustomLoader from '@/Components/CustomLoader';
 
 // --- COMPONENT: SKELETON LOADER ---
 const ProjectSkeleton = () => (
@@ -211,7 +212,7 @@ export default function ProjectDashboardPage() {
     { name: project?.name || "Loading...", href: "#" },
   ];
 
-  if (loading) return <><DashboardPageHeader breadData={breadData} heading="Project Dashboard" /><ProjectSkeleton /></>;
+  if (loading) return <CustomLoader text="Loading project details..." />;
   
   if (!project) return (
     <div className="min-h-[60vh] flex flex-col items-center justify-center text-center">

@@ -1,6 +1,7 @@
 "use client";
 import React, { useState, useEffect } from "react";
-import { Eye, EyeOff, Upload, User, Loader2, CheckCircle2, X } from "lucide-react";
+// 1. Added Shield icon
+import { Eye, EyeOff, Upload, User, Loader2, CheckCircle2, X, Shield } from "lucide-react";
 import DashboardPageHeader from "@/Components/DashboardPageHeader";
 import axios from "axios"; 
 import { errorToast, successToast } from "@/lib/toast";
@@ -12,14 +13,15 @@ export default function ProfileSettings() {
   const {setUser}= useUserStore();
 
   const [formData, setFormData] = useState({
-    name: "", // Matches Schema 'name'
-    email: "", // Matches Schema 'email'
+    name: "", 
+    email: "", 
+    role: "", // 2. Added role to state
     currentPassword: "",
     newPassword: "",
     confirmPassword: ""
   });
   
-  const [profilePic, setProfilePic] = useState(null); // Matches Schema 'profilePic'
+  const [profilePic, setProfilePic] = useState(null); 
   const [imageFile, setImageFile] = useState(null);
   
   const [showCurrentPassword, setShowCurrentPassword] = useState(false);
@@ -50,14 +52,13 @@ export default function ProfileSettings() {
 
       const userData = data.user || {}; 
       
-    
       setFormData(prev => ({
         ...prev,
         name: userData.name || "", 
         email: userData.email || "",
+        role: userData.role || "User", // 3. Set role from backend
       }));
       
-      // Matches Schema 'profilePic'
       if (userData.profilePic) {
         setProfilePic(userData.profilePic);
       }
@@ -99,7 +100,6 @@ export default function ProfileSettings() {
   const handleRemoveImage = () => {
     setProfilePic(null);
     setImageFile(null);
-    // Note: To clear it in DB, we rely on the Save button
   };
 
   const validateForm = () => {
@@ -118,7 +118,7 @@ export default function ProfileSettings() {
       
       if (!formData.newPassword) {
         newErrors.newPassword = "New password is required";
-      } else if (formData.newPassword.length < 8) { // Adjusted length to be reasonable
+      } else if (formData.newPassword.length < 8) { 
         newErrors.newPassword = "Password must be at least 8 characters";
       }
       
@@ -146,12 +146,12 @@ export default function ProfileSettings() {
     try {
       const submitData = new FormData();
       
-      // Appending data matching your Schema
+      // Note: We do NOT append 'role' here, ensuring it cannot be updated by the user
       submitData.append("name", formData.name);
       submitData.append("email", formData.email);
       
       if (imageFile) {
-        submitData.append("profilePic", imageFile); // 'profilePic' key for backend
+        submitData.append("profilePic", imageFile); 
       }
       
       if (showPasswordSection && formData.newPassword) {
@@ -169,7 +169,6 @@ export default function ProfileSettings() {
       successToast( data.message || "Profile updated successfully!" );
       setMessage({ type: "success", text: data.message || "Profile updated successfully!" });
 
-      
       if (data.user) {
         setUser(data.user);
         if (data.user.profilePic) setProfilePic(data.user.profilePic);
@@ -177,6 +176,7 @@ export default function ProfileSettings() {
             ...prev,
             name: data.user.name || prev.name,
             email: data.user.email || prev.email,
+            role: data.user.role || prev.role, // Update role if returned
         }));
       }
 
@@ -255,15 +255,23 @@ export default function ProfileSettings() {
                 <h2 className="text-xl font-semibold text-base-content">
                   {formData.name || "User"}
                 </h2>
-                <p className="text-xs text-base-content/60">
-                  JPG, PNG or GIF • Max 5MB
-                </p>
+                <div className="flex items-center justify-center sm:justify-start gap-2">
+                   <p className="text-xs text-base-content/60">
+                    JPG, PNG or GIF • Max 5MB
+                   </p>
+                   {/* Badge for Role */}
+                   <div className="badge badge-sm badge-ghost gap-1">
+                      <Shield size={10}/>
+                      {formData.role}
+                   </div>
+                </div>
+               
                 {profilePic && (
                   <button 
                     onClick={handleRemoveImage}
                     type="button" 
                     disabled={isLoading}
-                    className="btn btn-ghost btn-xs text-error hover:bg-error/10"
+                    className="btn btn-ghost btn-xs text-error hover:bg-error/10 mt-2"
                   >
                     <X size={14} />
                     Remove Photo
@@ -352,6 +360,31 @@ export default function ProfileSettings() {
                     </label>
                   )}
                 </div>
+
+                {/* 4. Role Field (Read Only) */}
+                <div className="form-control sm:col-span-2">
+                  <label className="label py-1">
+                    <span className="label-text text-sm font-medium text-base-content">
+                      User Role
+                    </span>
+                  </label>
+                  <div className="relative">
+                     <input
+                        type="text"
+                        value={formData.role}
+                        readOnly
+                        disabled
+                        className="input input-sm input-bordered w-full text-sm bg-base-200 text-base-content/70 cursor-not-allowed pl-9 border-base-300"
+                      />
+                      <Shield className="absolute left-3 top-1/2 -translate-y-1/2 text-base-content/40" size={16} />
+                  </div>
+                  <label className="label py-1">
+                    <span className="label-text-alt text-base-content/50 text-xs">
+                       Your assigned role cannot be changed. Contact an administrator for permissions.
+                    </span>
+                  </label>
+                </div>
+
               </div>
             </div>
 

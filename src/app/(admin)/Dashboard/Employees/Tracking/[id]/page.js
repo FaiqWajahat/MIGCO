@@ -5,15 +5,16 @@ import axios from "axios";
 import {
   Calendar,
   CheckCircle,
-  XCircle,
   Clock,
   Search,
   Download,
   User,
   Loader2,
   AlertCircle,
-  ArrowBigLeft,
-  ArrowLeft
+  ArrowLeft,
+  Briefcase,
+  Wallet,
+  FileText 
 } from "lucide-react";
 import DashboardPageHeader from "@/Components/DashboardPageHeader";
 import CustomDropdown from "@/Components/CustomDropdown";
@@ -21,18 +22,14 @@ import { warningToast } from "@/lib/toast";
 import CustomLoader from "@/Components/CustomLoader";
 import Avatar from "@/Components/Avatar";
 
-
-
-export default function EmployeeTrackingPage() {
-
+export default function EmployeeSalaryTrackingPage() {
   const router = useRouter();
-  // 1. Get ID from URL Parameters
   const params = useParams();
-  const { id } = params; // This is the MongoDB _id
+  const { id } = params; // Employee ID
 
   // Data States
   const [employee, setEmployee] = useState(null);
-  const [trackingData, setTrackingData] = useState([]);
+  const [salaryHistory, setSalaryHistory] = useState([]);
   
   // UI States
   const [isLoadingEmployee, setIsLoadingEmployee] = useState(true);
@@ -43,13 +40,14 @@ export default function EmployeeTrackingPage() {
   const [searchQuery, setSearchQuery] = useState("");
   const [filterStatus, setFilterStatus] = useState("All");
   
-  // Date States
-  const todayISO = new Date().toISOString().split("T")[0];
-  const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split("T")[0];
-  const [fromDate, setFromDate] = useState(thirtyDaysAgo);
-  const [toDate, setToDate] = useState(todayISO);
+  // --- DATE LOGIC (Updated to YYYY-MM) ---
+  const currentMonth = new Date().toISOString().slice(0, 7);
+  const startOfYear = `${new Date().getFullYear()}-01`;
+  
+  const [fromDate, setFromDate] = useState(startOfYear);
+  const [toDate, setToDate] = useState(currentMonth);
 
-  // --- 1. Fetch Employee on Mount ---
+  // --- 1. Fetch Employee Details ---
   useEffect(() => {
     const fetchEmployeeDetails = async () => {
       if (!id) return;
@@ -69,76 +67,97 @@ export default function EmployeeTrackingPage() {
     fetchEmployeeDetails();
   }, [id]);
 
-  // --- 2. Fetch Tracking Data ---
+  // --- 2. Fetch Salary History ---
   const handleSearch = async () => {
     if (!fromDate || !toDate) {
-      warningToast("Please select both From and To dates");
+      warningToast("Please select both From and To months");
       return;
     }
-    if (new Date(fromDate) > new Date(toDate)) {
-      warningToast("From date cannot be after To date");
-      return;
+    
+    if (fromDate > toDate) {
+        warningToast("From Month cannot be after To Month");
+        return;
     }
     
     setHasSearched(true);
     setIsLoadingData(true);
     
     try {
-      const response = await axios.get("/api/attendance/tracking", {
+      const response = await axios.get(`/api/salary/salary-list/${id}/employee`, {
         params: {
-          employeeId: id,
           from: fromDate,
           to: toDate
         }
       });
 
       if (response.data.success) {
-        setTrackingData(response.data.data);
+        setSalaryHistory(response.data.data);
       }
     } catch (error) {
-      console.error("Error fetching tracking data:", error);
-      setTrackingData([]);
+      console.error("Error fetching salary data:", error);
+      setSalaryHistory([]);
     } finally {
       setIsLoadingData(false);
     }
   };
 
-  // --- 3. Filtering Logic (Client Side) ---
+  // --- 3. Filtering Logic (UPDATED FOR 'SAVE') ---
   const filteredData = useMemo(() => {
-    return trackingData.filter((record) => {
-      const matchesStatus = filterStatus === "All" || record.status === filterStatus;
+    return salaryHistory.filter((record) => {
+      // 1. Status Filter 
+      const matchesStatus = filterStatus === "All" || 
+                            (filterStatus === "Paid" && record.status === "paid") ||
+                            (filterStatus === "Pending" && record.status === "pending") ||
+                            (filterStatus === "Draft" && record.status === "draft" ); 
       
+      // 2. Search Text
       const searchLower = searchQuery.toLowerCase();
       const matchesSearch = 
         searchQuery === "" ||
-        record.date.includes(searchQuery) ||
-        (record.projectName && record.projectName.toLowerCase().includes(searchLower));
+        (record.projectName && record.projectName.toLowerCase().includes(searchLower)) ||
+        (record.foremanName && record.foremanName.toLowerCase().includes(searchLower));
         
       return matchesStatus && matchesSearch;
     });
-  }, [trackingData, filterStatus, searchQuery]);
+  }, [salaryHistory, filterStatus, searchQuery]);
 
-  // --- 4. Statistics ---
-  const stats = useMemo(() => ({
-    total: trackingData.length,
-    present: trackingData.filter((r) => r.status === "Present").length,
-    absent: trackingData.filter((r) => r.status === "Absent").length,
-    leave: trackingData.filter((r) => r.status === "Leave").length,
-  }), [trackingData]);
+  // --- 4. Statistics Calculation (UPDATED) ---
+  const stats = useMemo(() => {
+    const totalRecords = salaryHistory.length;
+    
+    const totalEarned = salaryHistory.reduce((sum, r) => sum + (Number(r.salary) || 0), 0);
+    
+    const totalPaid = salaryHistory
+      .filter(r => r.status === 'paid')
+      .reduce((sum, r) => sum + (Number(r.salary) || 0), 0);
+      
+    const totalPending = salaryHistory
+      .filter(r => r.status === 'pending')
+      .reduce((sum, r) => sum + (Number(r.salary) || 0), 0);
 
-  const attendancePercentage = stats.total > 0 
-    ? Math.round((stats.present / stats.total) * 100) 
-    : 0;
+    // New Stat for Drafts/Saved
+    const totalSaved = salaryHistory
+      .filter(r => r.status === 'draft')
+      .reduce((sum, r) => sum + (Number(r.salary) || 0), 0);
 
-  // --- 5. Export Handler ---
+    return { totalRecords, totalEarned, totalPaid, totalPending, totalSaved };
+  }, [salaryHistory]);
+
+  // --- 5. Format Currency ---
+  const formatCurrency = (amount) => {
+    return new Intl.NumberFormat('en-SA', { style: 'currency', currency: 'SAR', maximumFractionDigits: 0 }).format(amount);
+  };
+
+  // --- 6. Export Handler ---
   const handleExport = () => {
     const csvContent = [
-      ["Date", "Status", "Project", "Iqama"],
+      ["Month", "Project", "Foreman", "Salary Amount", "Status"],
       ...filteredData.map(r => [
-        new Date(r.date).toLocaleDateString(), 
-        r.status, 
+        new Date(r.date).toLocaleDateString('en-US', { month: 'long', year: 'numeric' }), 
         r.projectName || "N/A",
-        employee?.iqama || employee?.iqamaNumber || ""
+        r.foremanName || "N/A",
+        r.salary,
+        r.status
       ])
     ].map(row => row.join(",")).join("\n");
     
@@ -146,20 +165,18 @@ export default function EmployeeTrackingPage() {
     const url = window.URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = `${employee?.name || "Employee"}_attendance.csv`;
+    a.download = `${employee?.name || "Employee"}_salary_history.csv`;
     a.click();
   };
 
   const breadData = [
     { name: "Dashboard", href: "/Dashboard" },
     { name: "Employees", href: "/Dashboard/Employees" },
-    { name: "Tracking", href: "#" },
+    { name: "Salary History", href: "#" },
   ];
 
   if (isLoadingEmployee) {
-    return (
-      <CustomLoader text={'loading employee field tracking...'}/>
-    );
+    return <CustomLoader text={'Loading employee profile...'}/>;
   }
 
   if (!employee) {
@@ -167,127 +184,136 @@ export default function EmployeeTrackingPage() {
       <div className="flex h-screen w-full flex-col items-center justify-center gap-4">
         <AlertCircle className="w-12 h-12 text-error" />
         <h2 className="text-xl font-bold">Employee Not Found</h2>
+        <button onClick={() => router.back()} className="btn btn-sm">Go Back</button>
       </div>
     );
   }
 
   return (
     <> 
-    <DashboardPageHeader breadData={breadData} heading="Employee Tracking" />
+    <DashboardPageHeader breadData={breadData} heading="Salary History" />
     <div className="w-full min-h-screen">
       <div className="max-w-7xl mx-auto space-y-6">
         
-        {/* Employee Profile Card */}
+        {/* --- Employee Profile Card --- */}
         <div className="bg-base-100 rounded-xl shadow-sm border border-base-300 p-6">
           <div className="flex items-center gap-4">
             <div className="avatar">
-                                     <Avatar name={employee.name} size='lg'/>
-                                   </div>
+               <Avatar name={employee.name} size='lg'/>
+            </div>
             <div className="flex-1">
               <h2 className="text-2xl font-bold text-base-content">{employee.name}</h2>
               <div className="flex flex-wrap gap-4 mt-2 text-xs text-base-content/70">
-                {employee.position && (
+                {employee.role && (
                     <div className="flex items-center gap-2">
                         <User className="w-4 h-4" />
-                        <span>{employee.position}</span>
+                        <span>{employee.role}</span>
                     </div>
                 )}
                 <div className="flex items-center gap-2">
                   <span className="font-semibold">Iqama:</span>
                   <span className="font-mono">{employee.iqama || employee.iqamaNumber || "N/A"}</span>
                 </div>
-                {employee.department && (
-                    <div className="flex items-center gap-2">
-                    <span className="font-semibold">Department:</span>
-                    <span>{employee.department}</span>
-                    </div>
-                )}
+                <div className="flex items-center gap-2">
+                  <span className="font-semibold">Base Salary:</span>
+                  <span className="text-success font-bold">{formatCurrency(employee.salary || 0)}</span>
+                </div>
               </div>
             </div>
             <button
               onClick={() => router.push("/Dashboard/Employees")}
-              className="btn btn-sm btn-outline  flex items-center gap-2"
+              className="btn btn-sm btn-outline flex items-center gap-2"
             >
               <ArrowLeft className="w-4 h-4" /> Back 
-              </button>
+            </button>
           </div>
         </div>
 
-        {/* Filters & Search Control Bar */}
+        {/* --- Filters & Search Control Bar --- */}
         <div className="bg-base-100 rounded-xl shadow-sm border border-base-300 p-6">
           <div className="flex flex-col lg:flex-row gap-4 items-start lg:items-end justify-between">
             <div className="flex flex-wrap items-end gap-3 w-full lg:w-auto">
+              
+              {/* FROM MONTH INPUT */}
               <div className="flex flex-col gap-1 flex-1 sm:flex-none">
-                <label className="font-medium text-xs text-base-content/80">From Date</label>
-                <input 
-                  type="date" 
-                  value={fromDate} 
-                  onChange={(e) => setFromDate(e.target.value)} 
-                  max={toDate} 
-                  className="px-3 py-2 border border-base-300 rounded-lg text-xs bg-base-100 w-full"
-                />
+                <label className="font-medium text-xs text-base-content/80">From Month</label>
+                <div className="relative">
+                    <Calendar className="absolute left-3 top-2.5 w-4 h-4 text-base-content/40 pointer-events-none" />
+                    <input 
+                    type="month"
+                    value={fromDate} 
+                    onChange={(e) => setFromDate(e.target.value)} 
+                    max={toDate} 
+                    className="pl-9 pr-3 py-2 border border-base-300 rounded-lg text-xs bg-base-100 w-full focus:outline-none focus:border-[var(--primary-color)]"
+                    />
+                </div>
               </div>
+
+              {/* TO MONTH INPUT */}
               <div className="flex flex-col gap-1 flex-1 sm:flex-none">
-                <label className="font-medium text-xs text-base-content/80">To Date</label>
-                <input 
-                  type="date" 
-                  value={toDate} 
-                  onChange={(e) => setToDate(e.target.value)} 
-                  min={fromDate} 
-                  max={todayISO} 
-                  className="px-3 py-2 border border-base-300 rounded-lg text-xs bg-base-100 w-full"
-                />
+                <label className="font-medium text-xs text-base-content/80">To Month</label>
+                <div className="relative">
+                    <Calendar className="absolute left-3 top-2.5 w-4 h-4 text-base-content/40 pointer-events-none" />
+                    <input 
+                    type="month"
+                    value={toDate} 
+                    onChange={(e) => setToDate(e.target.value)} 
+                    min={fromDate} 
+                    className="pl-9 pr-3 py-2 border border-base-300 rounded-lg text-xs bg-base-100 w-full focus:outline-none focus:border-[var(--primary-color)]"
+                    />
+                </div>
               </div>
+
               <button 
                 onClick={handleSearch} 
                 disabled={isLoadingData}
                 className="flex items-center justify-center gap-2 px-6 py-2 bg-[var(--primary-color)] text-white rounded-sm cursor-pointer hover:opacity-90 transition font-medium text-xs h-[34px]"
               >
                 {isLoadingData ? <Loader2 className="w-4 h-4 animate-spin"/> : <Search className="w-4 h-4" />}
-                {isLoadingData ? "Searching..." : "Search Records"}
+                {isLoadingData ? "Loading..." : "Get History"}
               </button>
             </div>
 
             <div className="flex items-center gap-3 w-full lg:w-auto justify-center md:justify-end ">
               <label className="text-xs font-medium text-base-content/80 whitespace-nowrap ">Status:</label>
+              {/* UPDATED DROPDOWN */}
               <CustomDropdown
                 value={filterStatus}
                 setValue={setFilterStatus}
-                dropdownMenu={["All", "Present", "Absent", "Leave"]}
+                dropdownMenu={["All", "Paid", "Pending", "Draft"]}
               />
             </div>
           </div>
         </div>
 
-        {/* Results Area */}
+        {/* --- Results Area --- */}
         {hasSearched && (
           <>
-            {/* Stats Grid */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
+            {/* Financial Stats Grid */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
               <div className="bg-base-100 rounded-xl shadow-sm border border-base-300 p-4">
-                <div className="text-xs text-base-content/60 uppercase font-medium mb-2">Total Days</div>
-                <div className="text-3xl font-bold text-base-content">{stats.total}</div>
-                <div className="text-xs mt-1 text-base-content/60">In selected range</div>
+                <div className="text-xs text-base-content/60 uppercase font-medium mb-2">Total Paid</div>
+                <div className="text-2xl font-bold text-success">{formatCurrency(stats.totalPaid)}</div>
+                <div className="text-xs mt-1 text-success">Cleared Amount</div>
               </div>
+
               <div className="bg-base-100 rounded-xl shadow-sm border border-base-300 p-4">
-                <div className="text-xs text-base-content/60 uppercase font-medium mb-2">Present</div>
-                <div className="text-3xl font-bold text-success">{stats.present}</div>
-                <div className="text-xs mt-1 text-success">Days present</div>
+                <div className="text-xs text-base-content/60 uppercase font-medium mb-2">Pending Dues</div>
+                <div className="text-2xl font-bold text-error">{formatCurrency(stats.totalPending)}</div>
+                <div className="text-xs mt-1 text-error">Unpaid Amount</div>
               </div>
+
+              {/* NEW: DRAFT / SAVED STAT */}
               <div className="bg-base-100 rounded-xl shadow-sm border border-base-300 p-4">
-                <div className="text-xs text-base-content/60 uppercase font-medium mb-2">Absent</div>
-                <div className="text-3xl font-bold text-error">{stats.absent}</div>
-                <div className="text-xs mt-1 text-error">Days absent</div>
+                <div className="text-xs text-base-content/60 uppercase font-medium mb-2">Draft / Saved</div>
+                <div className="text-2xl font-bold text-info">{formatCurrency(stats.totalSaved)}</div>
+                <div className="text-xs mt-1 text-info">Not yet submitted</div>
               </div>
+
               <div className="bg-base-100 rounded-xl shadow-sm border border-base-300 p-4">
-                <div className="text-xs text-base-content/60 uppercase font-medium mb-2">Leave</div>
-                <div className="text-3xl font-bold text-warning">{stats.leave}</div>
-                <div className="text-xs mt-1 text-warning">Days on leave</div>
-              </div>
-              <div className="bg-base-100 rounded-xl shadow-sm border border-base-300 p-4">
-                <div className="text-xs text-base-content/60 uppercase font-medium mb-2">Attendance</div>
-                <div className="text-3xl font-bold text-[var(--primary-color)]">{attendancePercentage}%</div>
-                <div className="text-xs mt-1 text-[var(--primary-color)]">Attendance rate</div>
+                <div className="text-xs text-base-content/60 uppercase font-medium mb-2">Total Earned</div>
+                <div className="text-2xl font-bold text-base-content">{formatCurrency(stats.totalEarned)}</div>
+                <div className="text-xs mt-1 text-base-content/60">Across {stats.totalRecords} records</div>
               </div>
             </div>
 
@@ -298,7 +324,7 @@ export default function EmployeeTrackingPage() {
                   <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-base-content/40" />
                   <input 
                     type="text" 
-                    placeholder="Search within results (date or project)..." 
+                    placeholder="Search project or foreman..." 
                     value={searchQuery} 
                     onChange={(e) => setSearchQuery(e.target.value)} 
                     className="w-full pl-10 pr-4 py-2 border border-base-300 rounded-lg text-xs bg-base-100"
@@ -310,29 +336,29 @@ export default function EmployeeTrackingPage() {
                   disabled={filteredData.length === 0}
                 >
                   <Download className="w-4 h-4" />
-                  Export CSV
+                  Export History
                 </button>
               </div>
             </div>
           </>
         )}
 
-        {/* Table Area */}
+        {/* --- Table Area --- */}
         <div className="bg-base-100 rounded-xl shadow-sm border border-base-300 overflow-hidden min-h-[300px]">
           {!hasSearched ? (
             <div className="flex flex-col justify-center items-center h-full py-20">
               <div className="flex flex-col items-center gap-3 text-center">
-                <Search className="w-16 h-16 text-base-content/40" />
-                <div className="font-semibold text-lg text-base-content">Ready to search</div>
+                <Wallet className="w-16 h-16 text-base-content/40" />
+                <div className="font-semibold text-lg text-base-content">View Salary History</div>
                 <div className="text-base-content/60 text-xs max-w-md">
-                  Select a date range and click <bold>Search Records</bold> button to view attendance data for {employee.name}.
+                  Select a month range and click <strong>Get History</strong> to view financial records for {employee.name}.
                 </div>
               </div>
             </div>
           ) : isLoadingData ? (
              <div className="flex flex-col justify-center items-center h-full py-20">
               <Loader2 className="w-12 h-12 text-[var(--primary-color)] animate-spin" />
-              <span className="text-sm mt-4 text-base-content/60">Fetching attendance records...</span>
+              <span className="text-sm mt-4 text-base-content/60">Fetching salary records...</span>
             </div>
           ) : (
             <div className="overflow-x-auto">
@@ -340,11 +366,11 @@ export default function EmployeeTrackingPage() {
                 <thead className="bg-base-200 border-b border-base-300">
                   <tr>
                     <th className="px-6 py-4 text-left text-xs font-semibold text-base-content/80 uppercase">#</th>
-                    <th className="px-6 py-4 text-left text-xs font-semibold text-base-content/80 uppercase">Date</th>
-                    <th className="px-6 py-4 text-left text-xs font-semibold text-base-content/80 uppercase">Day</th>
-                    <th className="px-6 py-4 text-left text-xs font-semibold text-base-content/80 uppercase">Status</th>
+                    <th className="px-6 py-4 text-left text-xs font-semibold text-base-content/80 uppercase">Month & Year</th>
                     <th className="px-6 py-4 text-left text-xs font-semibold text-base-content/80 uppercase">Project</th>
-                    <th className="px-6 py-4 text-center text-xs font-semibold text-base-content/80 uppercase">Indicator</th>
+                    <th className="px-6 py-4 text-left text-xs font-semibold text-base-content/80 uppercase">Foreman</th>
+                    <th className="px-6 py-4 text-right text-xs font-semibold text-base-content/80 uppercase">Amount</th>
+                    <th className="px-6 py-4 text-center text-xs font-semibold text-base-content/80 uppercase">Status</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-base-300">
@@ -352,38 +378,65 @@ export default function EmployeeTrackingPage() {
                     <tr>
                       <td colSpan={6} className="py-16 text-center">
                         <div className="flex flex-col items-center gap-2">
-                          <Calendar className="w-12 h-12 text-base-content/40" />
-                          <div className="font-medium text-xs text-base-content">No records found</div>
-                          <div className="text-base-content/60 text-xs">Try adjusting your filters</div>
+                          <AlertCircle className="w-12 h-12 text-base-content/40" />
+                          <div className="font-medium text-xs text-base-content">No salary records found</div>
+                          <div className="text-base-content/60 text-xs">Try adjusting dates or filters</div>
                         </div>
                       </td>
                     </tr>
                   ) : (
                     filteredData.map((record, i) => {
-                      const date = new Date(record.date);
-                      const dayName = date.toLocaleDateString("en-US", { weekday: "short" });
-                      const statusColors = {
-                        Present: { bg: "bg-success/10", text: "text-success", icon: <CheckCircle className="w-5 h-5 text-success" /> },
-                        Absent: { bg: "bg-error/10", text: "text-error", icon: <XCircle className="w-5 h-5 text-error" /> },
-                        Leave: { bg: "bg-warning/10", text: "text-warning", icon: <Clock className="w-5 h-5 text-warning" /> }
-                      };
-                      // Default fallback if status is undefined or not in map
-                      const statusStyle = statusColors[record.status] || { bg: "bg-base-200", text: "text-base-content", icon: null };
+                      const dateObj = new Date(record.date);
+                      const monthYear = dateObj.toLocaleDateString("en-US", { month: "short", year: "numeric" });
+                      
+                      const isPaid = record.status === 'paid';
+                      const isSaved = record.status === 'draft'; // <--- Check for save status
                       
                       return (
-                        <tr key={i} className="hover:bg-base-200">
-                          <td className="px-6 py-4 text-xs text-base-content">{i + 1}</td>
-                          <td className="px-6 py-4 text-xs text-base-content whitespace-nowrap">{date.toLocaleDateString()}</td>
-                          <td className="px-6 py-4 text-xs text-base-content">{dayName}</td>
+                        <tr key={i} className="hover:bg-base-200 transition-colors">
+                          <td className="px-6 py-4 text-xs text-base-content/60">{i + 1}</td>
+                          
                           <td className="px-6 py-4">
-                            <span className={`${statusStyle.bg} ${statusStyle.text} px-3 py-1 rounded-full text-xs font-medium`}>
-                              {record.status}
+                            <div className="flex items-center gap-2">
+                                <Calendar className="w-4 h-4 text-base-content/40" />
+                                <span className="text-sm font-medium">{monthYear}</span>
+                            </div>
+                          </td>
+                          
+                          <td className="px-6 py-4">
+                             <div className="flex items-center gap-2">
+                                <Briefcase className="w-4 h-4 text-base-content/40" />
+                                <span className="text-xs font-medium">{record.projectName || 'N/A'}</span>
+                             </div>
+                          </td>
+
+                          <td className="px-6 py-4 text-xs text-base-content/70">
+                            {record.foremanName || 'N/A'}
+                          </td>
+                          
+                          <td className="px-6 py-4 text-right">
+                            <span className="font-mono font-bold text-sm">
+                                {formatCurrency(record.salary)}
                             </span>
                           </td>
-                          <td className="px-6 py-4 text-xs text-base-content">
-                            {record.projectName || <span className="text-base-content/40 italic">No project</span>}
+                          
+                          <td className="px-6 py-4 text-center">
+                            {/* UPDATED STATUS BADGE LOGIC */}
+                            <span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium border
+                                ${isPaid 
+                                    ? "bg-success/10 text-success border-success/20" 
+                                    : isSaved 
+                                        ? "bg-info/10 text-info border-info/20" 
+                                        : "bg-warning/10 text-warning border-warning/20"
+                                }`}>
+                              
+                              {isPaid && <CheckCircle className="w-3 h-3"/>}
+                              {isSaved && <FileText className="w-3 h-3"/>}
+                              {!isPaid && !isSaved && <Clock className="w-3 h-3"/>}
+                              
+                              {isPaid ? "Paid" : isSaved ? "Draft" : "pending"}
+                            </span>
                           </td>
-                          <td className="px-6 py-4 text-center mx-auto">{statusStyle.icon}</td>
                         </tr>
                       );
                     })
@@ -398,7 +451,7 @@ export default function EmployeeTrackingPage() {
         {hasSearched && filteredData.length > 0 && (
           <div className="bg-base-100 rounded-xl shadow-sm border border-base-300 p-4">
             <div className="text-xs text-base-content/60 text-center">
-              Showing <strong className="text-[var(--primary-color)]">{filteredData.length}</strong> of <strong>{trackingData.length}</strong> records
+              Showing <strong className="text-[var(--primary-color)]">{filteredData.length}</strong> of <strong>{salaryHistory.length}</strong> records
             </div>
           </div>
         )}

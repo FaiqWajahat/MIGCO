@@ -25,6 +25,12 @@ const EmployeeSalarySchema = new mongoose.Schema({
     ref: 'Employee',
     required: true,
   },
+
+  salaryListId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'SalaryList',
+    required: false,
+  },
   
   // --- Period Details ---
   fromDate: { type: Date, required: true },
@@ -59,6 +65,8 @@ const EmployeeSalarySchema = new mongoose.Schema({
 
   totalDeductions: { type: Number, required: true }, // Sum of all deduction types
   netSalary: { type: Number, required: true, min: 0 },
+
+
 
   // --- Status & Payment ---
   status: {

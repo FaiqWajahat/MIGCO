@@ -67,16 +67,22 @@ const mainMenu = [
     ],
   },
   {
+    title: "Salary",
+    icon: Wallet,
+    children: [
+      { title: "All Salary Lists", href: "/Dashboard/Salary" },
+      { title: "Add Salary List", href: "/Dashboard/Salary/Add" },
+      {title:  "Pay Salary", href: "/Dashboard/Salary/Pay" },
+    ],
+  },
+ 
+  {
     title:"Foremans",
     icon: Users,
     href: "/Dashboard/Foremans",
   },
-  {
-    title: "Salary",
-    icon: Wallet,
-    href: "/Dashboard/Salary",
-  },
- 
+  
+  
   
 ];
 

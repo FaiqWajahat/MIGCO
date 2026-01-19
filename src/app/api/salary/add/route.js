@@ -3,6 +3,7 @@ import connectDB from '@/lib/mongodb';
 import calculateSalaryPeriodMonth from '@/lib/utils'; 
 import EmployeeSalary from '@/models/employeeSalary';
 import employeeExpense from '@/models/employeeExpenses'; 
+import SalaryList from '@/models/salaryList'; // <--- IMPORT THIS
 
 export async function POST(request) {
   try {
@@ -12,7 +13,8 @@ export async function POST(request) {
     const { 
       employeeId, fromDate, toDate, baseSalary, absentDays, allowances, deductions, 
       manualExpenses, linkedExpenses, notes, status, 
-      absentDeduction, manualExpensesTotal, dbExpensesTotal, totalDeductions, netSalary, paidDate , projectName
+      absentDeduction, manualExpensesTotal, dbExpensesTotal, totalDeductions, netSalary, 
+      paidDate, projectName, salaryListId 
     } = body;
 
     // 1. Validation
@@ -27,10 +29,10 @@ export async function POST(request) {
     });
 
     if (existingRecord) {
-      return NextResponse.json({ success: false, message: 'Salary of this month already added.' }, { status: 409 });
+      return NextResponse.json({ success: false, message: 'Salary for this period already exists.' }, { status: 409 });
     }
 
-    // 3. Create Salary Record
+    // 3. Create Salary Record (Now storing salaryListId)
     const newRecord = await EmployeeSalary.create({
       employeeId, fromDate, toDate,
       month: calculateSalaryPeriodMonth(fromDate, toDate),
@@ -44,16 +46,37 @@ export async function POST(request) {
       dbExpensesTotal: dbExpensesTotal || 0,
       totalDeductions, netSalary,
       paidDate: status === 'Paid' ? (paidDate ? new Date(paidDate) : new Date()) : null,
+      salaryListId: salaryListId || null 
     });
 
     // ---------------------------------------------------------
-    // 4. ROBUST EXPENSE UPDATE (PARALLEL EXECUTION)
+    // 4. UPDATE PARENT SALARY LIST STATUS
+    // ---------------------------------------------------------
+    if (salaryListId) {
+      // Logic: If we are just saving as 'Pending', mark list as 'draft'. 
+      // If we are paying, mark list as 'paid'.
+      const listStatus = status === 'Paid' ? 'paid' : 'draft';
+
+      await SalaryList.updateOne(
+        { 
+          _id: salaryListId, 
+          "employeeList.employeeId": employeeId 
+        },
+        { 
+          $set: { 
+            "employeeList.$.status": listStatus // The $ updates the specific array item found
+          } 
+        }
+      );
+     
+    }
+
+    // ---------------------------------------------------------
+    // 5. ROBUST EXPENSE UPDATE (PARALLEL EXECUTION)
     // ---------------------------------------------------------
     if (status === 'Paid' && linkedExpenses?.length > 0) {
       console.log(`Processing ${linkedExpenses.length} expense updates...`);
 
-      // We use Promise.all to run all updates at the same time. 
-      // This is much faster and safer than a standard for-loop.
       await Promise.all(linkedExpenses.map(async (link) => {
         try {
           const { expenseId, amount } = link;
@@ -69,7 +92,6 @@ export async function POST(request) {
             const newPaidTotal = currentPaid + deductionAmount;
             
             // B. Fix Floating Point Math (Round to 2 decimals)
-            // This prevents errors where 99.99999 is considered less than 100
             expenseDoc.paidAmount = Math.round(newPaidTotal * 100) / 100;
 
             // C. Update Status
@@ -80,10 +102,8 @@ export async function POST(request) {
             }
 
             await expenseDoc.save();
-            console.log(`Updated Expense ${expenseId}: Paid ${deductionAmount}, New Status: ${expenseDoc.status}`);
           }
         } catch (innerError) {
-          // Log specific error but don't crash the whole request
           console.error(`Failed to update expense ${link.expenseId}:`, innerError);
         }
       }));

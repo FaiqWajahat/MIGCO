@@ -19,8 +19,7 @@ import {
 import { useLanguage } from "@/stores/language";
 
 // --- Configuration ---
-const mainMenu = [
-  {
+const mainMenu = [{
     title: "Dashboard",
     icon: LayoutDashboard,
     href: "/Dashboard",
@@ -30,8 +29,8 @@ const mainMenu = [
     icon: Warehouse,
     children: [
       { title: "All Projects", href: "/Dashboard/Projects" },
+    
       { title: "Add Project", href: "/Dashboard/Projects/Add" },
-     
     ]
   },
   {
@@ -41,7 +40,6 @@ const mainMenu = [
       { title: "All Employees", href: "/Dashboard/Employees" },
       { title: "Add Employee", href: "/Dashboard/Employees/Add" },
       { title: "Expenses / Claims", href: "/Dashboard/Employees/Expense" },
-      
     ],
   },
   {
@@ -50,7 +48,6 @@ const mainMenu = [
     children: [
       { title: "All Assets", href: "/Dashboard/Company-Assets" },
       { title: "Add Asset", href: "/Dashboard/Company-Assets/Add" },
-     
     ],
   },
   {
@@ -61,11 +58,32 @@ const mainMenu = [
       { title: "History", href: "/Dashboard/Attendance" },
     ],
   },
+   {
+    title: "Quotations",
+    icon: ShieldCheck,
+    children: [
+      { title: "All Quotations", href: "/Dashboard/Quotations" },
+      { title: "Add Quotation", href: "/Dashboard/Quotations/Add" },
+    ],
+  },
   {
     title: "Salary",
     icon: Wallet,
-    href: "/Dashboard/Salary",
+    children: [
+      { title: "All Salary Lists", href: "/Dashboard/Salary" },
+      { title: "Add Salary List", href: "/Dashboard/Salary/Add" },
+      {title:  "Pay Salary", href: "/Dashboard/Salary/Pay" },
+    ],
   },
+ 
+  {
+    title:"Foremans",
+    icon: Users,
+    href: "/Dashboard/Foremans",
+  },
+  
+  
+  
 ];
 
 const accountMenu = [
@@ -77,7 +95,6 @@ const accountMenu = [
       { title: "Font Style", href: "/Dashboard/Setting/Fonts" },
     ],
   },
-  
   {
     title: "System Users",
     icon: ShieldCheck,
@@ -88,9 +105,7 @@ const accountMenu = [
     icon: BadgeCheck, 
     href: "/Dashboard/Profile" 
   },
-  
 ];
-// --- Components ---
 
 /**
  * Individual Sidebar Item Component

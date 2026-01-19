@@ -12,7 +12,7 @@ import axios from 'axios';
 import { errorToast } from '@/lib/toast';
 import Avatar from '@/Components/Avatar';
 
-const EmployeeRecord = () => {
+const EmployeeSalaryList = () => {
   const router = useRouter();
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedStatus, setSelectedStatus] = useState('Active');
@@ -23,8 +23,8 @@ const EmployeeRecord = () => {
 
   const breadData = [
     { name: "Dashboard", href: "/Dashboard" },
-    { name: "Foremans", href: "/Dashboard/Foremans" },
-    
+    { name: "Salary", href: "/Dashboard/Salary" },
+   
   ];
 
   // Fetch employees
@@ -45,8 +45,7 @@ const EmployeeRecord = () => {
         return;
       }
 
-      const formans = response.data.employees.filter(emp => emp.role === 'Foreman');
-      setEmployees(formans);
+      setEmployees(response.data.employees);
     } catch (error) {
       console.log("error of fetching employee:", error);
       errorToast(error.response?.data?.message || "Something went wrong");
@@ -75,7 +74,7 @@ const EmployeeRecord = () => {
 
   // Navigate to expense details - FIXED: Using iqamaNumber
   const handleViewExpenses = (employeeId) => {
-    router.push(`/Dashboard/Foremans/${employeeId}/AssignProjects`);
+    router.push(`/Dashboard/Salary/Pay/${employeeId}`);
   };
 
   if (isLoading) {
@@ -86,16 +85,16 @@ const EmployeeRecord = () => {
 
   return (
     <>
-      <DashboardPageHeader breadData={breadData} heading="Project Foremans" />
+      <DashboardPageHeader breadData={breadData} heading="Employee Salary" />
 
      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
         <div className="stats shadow bg-base-100">
           <div className="stat">
-            <div className="stat-title text-xs">Foremans</div>
+            <div className="stat-title text-xs">Employees</div>
             <div className="stat-value text-2xl">
               {employees.length}
             </div>
-            <div className="stat-desc">Total Foremans</div>
+            <div className="stat-desc">Total Employees</div>
           </div>
         </div>
 
@@ -105,7 +104,7 @@ const EmployeeRecord = () => {
             <div className="stat-value text-2xl text-success">
               {activeEmployees}
             </div>
-            <div className="stat-desc text-success">Active Foremans</div>
+            <div className="stat-desc text-success">Active Employees</div>
           </div>
         </div>
 
@@ -115,7 +114,7 @@ const EmployeeRecord = () => {
             <div className="stat-value text-2xl text-error">
               {inactiveEmployees}
             </div>
-            <div className="stat-desc text-error">Inactive Foremans</div>
+            <div className="stat-desc text-error">Inactive Employees</div>
           </div>
         </div>
       </div>
@@ -125,14 +124,14 @@ const EmployeeRecord = () => {
      <div className="w-full flex flex-col gap-4 md:flex-row items-center justify-between mb-6 md:px-2">
           <div className="w-full md:w-auto justify-center md:justify-start flex">
           <p className="text-sm text-base-content/60 mt-1">
-         Select Foreman to view Project Details
-        </p>
+    Choose employee to track  salary records.
+  </p>
           </div>
 
           <div className="flex items-center gap-4">
             <div className="w-full md:w-auto justify-center md:justify-start flex">
             <DashboardSearch 
-              placeholder="Search Foreman" 
+              placeholder="Search Employee" 
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
             />
@@ -158,7 +157,7 @@ const EmployeeRecord = () => {
                 <th>Employee</th>
                 
                 <th>Iqama</th>
-              
+            
                 <th>Status</th>
                 
                
@@ -182,15 +181,15 @@ const EmployeeRecord = () => {
                         </div>
 
                         <div>
-                          <h3 className="font-medium">{emp.name}</h3>
-                          <p className="text-xs text-base-content/70">{emp.role}</p>
+                          <h3 className="font-medium whitespace-nowrap">{emp.name}</h3>
+                          <p className="text-xs text-base-content/70 whitespace-nowrap">{emp.role}</p>
                         </div>
                       </div>
                     </td>
 
                     
                     <td className=" text-sm">{emp.iqamaNumber}</td>
-                   
+                  
                     <td>
                       {emp.status ? (
                         <span className="text-success font-medium">
@@ -226,4 +225,4 @@ const EmployeeRecord = () => {
   );
 };
 
-export default EmployeeRecord;
+export default EmployeeSalaryList;

@@ -1,228 +1,172 @@
-'use client';
+'use client'
 
-import React, { useState, useEffect } from 'react';
-
-import { useRouter } from 'next/navigation';
-
+import CustomLoader from "@/Components/CustomLoader";
 import DashboardPageHeader from "@/Components/DashboardPageHeader";
 import DashboardSearch from "@/Components/DashboardSearch";
-import CustomDropdown from "@/Components/CustomDropdown";
-import CustomLoader from '@/Components/CustomLoader';
-import axios from 'axios';
-import { errorToast } from '@/lib/toast';
-import Avatar from '@/Components/Avatar';
+// I will provide the code for this Table component below
+import SalaryListTable from "@/Components/SalaryListTable"; 
+import { errorToast } from "@/lib/toast";
+import axios from "axios";
+import { Plus } from "lucide-react";
 
-const EmployeeSalaryList = () => {
-  const router = useRouter();
-  const [searchTerm, setSearchTerm] = useState('');
-  const [selectedStatus, setSelectedStatus] = useState('All');
-  const [employees, setEmployees] = useState([]);
-  const [isLoading, setIsLoading] = useState(true);
+import { useRouter } from "next/navigation";
+import React, { useEffect, useState, useMemo } from "react";
 
-  const dropdownMenu = ['Active', 'Inactive', 'All'];
-
+const Page = () => {
   const breadData = [
     { name: "Dashboard", href: "/Dashboard" },
-    { name: "Salary", href: "/Dashboard/Salary" },
-   
+    { name: "Salary Sheets", href: "/Dashboard/Salary" },
   ];
 
-  // Fetch employees
+  const [salaryLists, setSalaryLists] = useState([]);
+  const [isLoading, setIsLoading] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
+
+  const router = useRouter();
+
   useEffect(() => {
-    fetchEmployees();
+    getSalaryLists();
+    console.log("Fetched Slary list , ", salaryLists);
+    
   }, []);
 
-  const fetchEmployees = async () => {
+  const getSalaryLists = async () => {
     setIsLoading(true);
-    
     try {
-      const response = await axios.get("/api/employee/getEmployee");
-      const success = response.data.success;
-
-      if (!success) {
-        errorToast(response.data.message || "Something went wrong");
-        setIsLoading(false);
-        return;
-      }
-
-      setEmployees(response.data.employees);
+      // Assuming you will create this GET endpoint
+      const response = await axios.get("/api/salary/salary-list"); 
+      
+      // Adjust this based on your actual API response structure
+      // Example: { message: "...", data: [...] }
+      const data = response.data.data || response.data.salaryLists || []; 
+      setSalaryLists(data);
+     
+      
     } catch (error) {
-      console.log("error of fetching employee:", error);
-      errorToast(error.response?.data?.message || "Something went wrong");
+      console.log("Error fetching salary lists:", error);
+      errorToast(error.response?.data?.message || "Failed to load salary sheets");
     } finally {
       setIsLoading(false);
     }
   };
 
-  // Filter employees - FIXED: Using iqamaNumber consistently
-  const filteredEmployees = employees.filter(emp => {
-    const matchesSearch = emp.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         emp.iqamaNumber?.includes(searchTerm) ||
-                         emp.phone?.includes(searchTerm);
-    const matchesStatus = selectedStatus === 'All' || 
-                         (selectedStatus === 'Active' && emp.status) ||
-                         (selectedStatus === 'Inactive' && !emp.status);
-    return matchesSearch && matchesStatus;
-  });
-
-  // Stats
-
-  const activeEmployees = employees.filter(emp => emp.status).length;
-  const inactiveEmployees = employees.filter(emp => !emp.status).length;
-
-
-
-  // Navigate to expense details - FIXED: Using iqamaNumber
-  const handleViewExpenses = (employeeId) => {
-    router.push(`/Dashboard/Salary/${employeeId}`);
+  // Handle deletion
+  const handleDeleteList = (listId) => {
+    setSalaryLists((prev) => prev.filter((item) => item._id !== listId));
   };
 
-  if (isLoading) {
-    return (
-      <CustomLoader text={"Loading Employees...."}/>
-    );
-  }
+  // Filter based on search query (Project Name or Foreman Name)
+  const filteredLists = useMemo(() => {
+    let filtered = salaryLists;
+
+    if (searchQuery.trim()) {
+      const query = searchQuery.toLowerCase();
+      filtered = filtered.filter((item) => 
+        item.projectName?.toLowerCase().includes(query) ||
+        item.foremanName?.toLowerCase().includes(query)
+      );
+    }
+
+    return filtered;
+  }, [salaryLists, searchQuery]);
+
+  // Calculate Stats
+  const stats = useMemo(() => {
+    const totalSheets = salaryLists.length;
+    // Count unique projects
+    const uniqueProjects = new Set(salaryLists.map(item => item.projectId)).size;
+    // Count unique foremen
+    const uniqueForemen = new Set(salaryLists.map(item => item.foremanId)).size;
+
+    return { totalSheets, uniqueProjects, uniqueForemen };
+  }, [salaryLists]);
+
+  if (isLoading) return <CustomLoader text={"Loading salary sheets..."}/> 
 
   return (
     <>
-      <DashboardPageHeader breadData={breadData} heading="Employee Salary" />
+      <DashboardPageHeader breadData={breadData} heading={`Salary Sheets`} />
 
-     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+      {/* --- STATS CARDS --- */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+        
         <div className="stats shadow bg-base-100">
           <div className="stat">
-            <div className="stat-title text-xs">Employees</div>
-            <div className="stat-value text-2xl">
-              {employees.length}
+            <div className="stat-figure text-primary">
+              
             </div>
-            <div className="stat-desc">Total Employees</div>
+            <div className="stat-title text-xs">Total Sheets</div>
+            <div className="stat-value text-2xl text-[var(--primary-color)]">
+              {stats.totalSheets}
+            </div>
+            <div className="stat-desc">Generated Salary Lists</div>
           </div>
         </div>
 
         <div className="stats shadow bg-base-100">
           <div className="stat">
-            <div className="stat-title text-xs">Active</div>
-            <div className="stat-value text-2xl text-success">
-              {activeEmployees}
+            <div className="stat-figure text-secondary">
+             
             </div>
-            <div className="stat-desc text-success">Active Employees</div>
+            <div className="stat-title text-xs">Projects</div>
+            <div className="stat-value text-2xl text-secondary">
+              {stats.uniqueProjects}
+            </div>
+            <div className="stat-desc">Active Sites</div>
           </div>
         </div>
 
         <div className="stats shadow bg-base-100">
           <div className="stat">
-            <div className="stat-title text-xs">Inactive</div>
-            <div className="stat-value text-2xl text-error">
-              {inactiveEmployees}
+            <div className="stat-figure text-accent">
+            
             </div>
-            <div className="stat-desc text-error">Inactive Employees</div>
+            <div className="stat-title text-xs">Foremen</div>
+            <div className="stat-value text-2xl text-accent">
+              {stats.uniqueForemen}
+            </div>
+            <div className="stat-desc">Supervisors</div>
           </div>
         </div>
+
       </div>
 
-      {/* Table Section */}
+      {/* --- MAIN CONTENT --- */}
       <div className="w-full bg-base-100 rounded-xl shadow-lg p-4 lg:p-6 mt-6">
-     <div className="w-full flex flex-col gap-4 md:flex-row items-center justify-between mb-6 md:px-2">
+        <div className="w-full flex flex-col gap-4 md:flex-row items-center justify-between mb-6 md:px-2">
+          
+          {/* Search Bar */}
           <div className="w-full md:w-auto justify-center md:justify-start flex">
-          <p className="text-sm text-base-content/60 mt-1">
-    Choose employee to track  salary records.
-  </p>
-          </div>
-
-          <div className="flex items-center gap-4">
-            <div className="w-full md:w-auto justify-center md:justify-start flex">
             <DashboardSearch 
-              placeholder="Search Employee" 
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
+              placeholder={"Search Project or Foreman"} 
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
             />
           </div>
-            <div>
-             
-              <CustomDropdown 
-                value={selectedStatus} 
-                setValue={setSelectedStatus} 
-                dropdownMenu={dropdownMenu} 
-              />
-            </div>
+
+          {/* Add Button */}
+          <div className="flex items-center gap-4">
+            <button
+              onClick={() => router.push("/Dashboard/Salary/Add")}
+              className="btn btn-sm bg-[var(--primary-color)] text-white rounded-sm hover:bg-[var(--primary-color)]/90"
+            >
+              <Plus className="w-4 h-4 mr-1" />
+              New Salary Sheet
+            </button>
           </div>
         </div>
 
-
-        {/* Employee Table */}
+        {/* Table */}
         <div className="w-full overflow-x-auto">
-          <table className="table w-full">
-            <thead className="text-xs font-semibold text-base-content/70 bg-base-200 uppercase tracking-wide">
-              <tr>
-                <th>S.No</th>
-                <th>Employee</th>
-                
-                <th>Iqama</th>
-            
-                <th>Status</th>
-                
-               
-              </tr>
-            </thead>
-
-            <tbody>
-              {filteredEmployees.length > 0 ? (
-                filteredEmployees.map((emp, idx) => (
-                  <tr
-                   onClick={() => handleViewExpenses(emp._id)}
-                    key={emp._id}
-                    className="hover:bg-base-200/40 transition cursor-pointer"
-                  >
-                    <td>{idx + 1}</td>
-
-                    <td>
-                      <div className="flex items-center gap-3">
-                        <div className="avatar">
-                          <Avatar name={emp.name} size='md'/>
-                        </div>
-
-                        <div>
-                          <h3 className="font-medium whitespace-nowrap">{emp.name}</h3>
-                          <p className="text-xs text-base-content/70 whitespace-nowrap">{emp.role}</p>
-                        </div>
-                      </div>
-                    </td>
-
-                    
-                    <td className=" text-sm">{emp.iqamaNumber}</td>
-                  
-                    <td>
-                      {emp.status ? (
-                        <span className="text-success font-medium">
-                          Active
-                        </span>
-                      ) : (
-                        <span className="text-error font-medium">
-                          Inactive
-                        </span>
-                      )}
-                    </td>
-
-                   
-
-                 
-                   
-                  </tr>
-                ))
-              ) : (
-                <tr>
-                  <td colSpan={7} className="text-center py-8">
-                    <p className="text-base-content/60">
-                      {searchTerm ? 'No employees found matching your search' : 'No employees available'}
-                    </p>
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
+          <SalaryListTable 
+            data={filteredLists} 
+            isLoading={isLoading}
+            onDelete={handleDeleteList}
+          />
         </div>
       </div>
     </>
   );
 };
 
-export default EmployeeSalaryList;
+export default Page;

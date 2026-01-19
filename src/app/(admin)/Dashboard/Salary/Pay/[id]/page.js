@@ -29,7 +29,7 @@ export default function EmployeeSalaryPage() {
   const [salaryRecords, setSalaryRecords] = useState([]);
   const [pendingExpenses, setPendingExpenses] = useState([]); 
   
-  // -- UPDATE: Project State --
+  // Projects State
   const [projects, setProjects] = useState([]);
   const [projectOptions, setProjectOptions] = useState([]);
   
@@ -42,9 +42,9 @@ export default function EmployeeSalaryPage() {
   
   // Modal States
   const [deleteModalOpen, setDeleteModalOpen] = useState(false);
-  const [viewModalOpen, setViewModalOpen] = useState(false); // -- UPDATE: View Modal State --
+  const [viewModalOpen, setViewModalOpen] = useState(false);
   const [recordToDelete, setRecordToDelete] = useState(null);
-  const [selectedRecord, setSelectedRecord] = useState(null); // -- UPDATE: Selected Record for View --
+  const [selectedRecord, setSelectedRecord] = useState(null);
 
   // Form State
   const [formData, setFormData] = useState({
@@ -59,8 +59,9 @@ export default function EmployeeSalaryPage() {
     notes: '',
     status: "Pending",
     employeeId: '',
-    projectId: '', // -- UPDATE: Project ID in form --
-    projectName: '' // -- UPDATE: Project Name for UI --
+    projectId: '', 
+    projectName: '',
+    salaryListId: null // <--- NEW: Stores the ID of the parent Salary List
   });
 
   const [calculatedData, setCalculatedData] = useState(null);
@@ -75,6 +76,7 @@ export default function EmployeeSalaryPage() {
       const emp = response.data.employee;
       setEmployee(emp);
       
+      // Initialize base form data with employee defaults
       setFormData(prev => ({ 
         ...prev, 
         baseSalary: emp.salary, 
@@ -86,16 +88,12 @@ export default function EmployeeSalaryPage() {
     }
   }, [employeeId, router]);
 
-  // -- UPDATE: Fetch Projects --
   const fetchProjects = useCallback(async () => {
     try {
-      // Assuming you have an endpoint to get active projects
-      const response = await axios.get(`/api/attendance/project`); 
+      const response = await axios.get(`/api/project/active-projects`); 
       if (response.data.success) {
-        setProjects(response.data.projects || []);
-        console.log("Projects loaded:", response.data.projects);
-        // Prepare names for CustomDropdown
-        setProjectOptions((response.data.projects|| []).map(p => p.name));
+        setProjects(response.data.data || []);
+        setProjectOptions((response.data.data|| []).map(p => p.name));
       }
     } catch (error) {
       console.error("Failed to load projects");
@@ -232,6 +230,60 @@ export default function EmployeeSalaryPage() {
     }
   }, [handleCalculate, formData.fromDate, formData.toDate, expenseAllocations]);
 
+  // --- FETCH PENDING RECORD (UPDATED) ---
+  const handleOpenCalculator = async () => {
+    setLoading(true);
+    // Reset calculator data temporarily
+    setCalculatedData(null); 
+    
+    try {
+        // Call your API endpoint
+        // NOTE: Ensure your API route is /api/salary/get-draft/[id] based on our previous discussions, 
+        // or update the string below to match your exact route file path.
+        const response = await axios.get(`/api/salary/${employeeId}/fetch-record`);
+        
+        if (response.data.success && response.data.record) {
+            const draft = response.data.record;
+            
+            // Helper to format Date Objects to YYYY-MM-DD for input fields
+            const formatForInput = (dateStr) => dateStr ? new Date(dateStr).toISOString().split('T')[0] : '';
+            const monthRef = draft.date ? new Date(draft.date).toISOString().slice(0, 7) : '';
+
+            // Pre-fill form with fetched data
+            setFormData(prev => ({
+                ...prev,
+                monthReference: monthRef,
+                fromDate: draft.fromDate ? formatForInput(draft.fromDate) : '', 
+                toDate: draft.toDate ? formatForInput(draft.toDate) : '',
+                projectId: draft.projectId || '',
+                projectName: draft.projectName || '',
+                baseSalary: draft.salary || employee?.salary || '', 
+                status: draft.status || "Pending",
+                employeeId: employeeId,
+                absentDays: draft.absentDays || '0', 
+                manualExpenses: draft.manualExpenses || [],
+                deductions: draft.deductions || '0',
+                allowances: draft.allowances || '0',
+                notes: draft.notes || '',
+                
+                // --- NEW: Capture Salary List ID ---
+                salaryListId: draft.salaryListId || null 
+            }));
+            
+            successToast("Draft found! Data pre-filled.");
+        } else {
+            // No draft found? Just reset to default fresh form
+            resetForm();
+        }
+    } catch (error) {
+        console.log("No pending draft found, starting fresh.");
+        resetForm();
+    } finally {
+        setLoading(false);
+        setShowCalculator(true); // Open the modal
+    }
+  };
+
   // --- Database Actions ---
 
   const resetForm = () => {
@@ -248,7 +300,8 @@ export default function EmployeeSalaryPage() {
       notes: '',
       status: "Pending",
       projectId: '', 
-      projectName: ''
+      projectName: '',
+      salaryListId: null // <--- Reset this to null
     });
     
     const initialAllocations = {};
@@ -258,7 +311,11 @@ export default function EmployeeSalaryPage() {
     setExpenseAllocations(initialAllocations);
 
     setCalculatedData(null);
-    setShowCalculator(false);
+  };
+
+  const closeCalculator = () => {
+      setShowCalculator(false);
+      resetForm();
   };
 
   const handleSaveRecord = async (status = 'Pending') => {
@@ -266,14 +323,14 @@ export default function EmployeeSalaryPage() {
       errorToast("Please fill in the date range first");
       return;
     }
-    // -- UPDATE: Validation for Project --
     if (!calculatedData.projectId) {
         errorToast("Please select a project");
         return;
     }
 
+    // Prepare Payload
     const finalPayload = { 
-        ...calculatedData, 
+        ...calculatedData, // This includes salaryListId automatically because it's in formData
         employeeId: calculatedData.employeeId || employee?._id || employeeId,
         status, 
         paidDate: status === 'Paid' ? new Date() : null,
@@ -291,6 +348,7 @@ export default function EmployeeSalaryPage() {
       
       if (status === 'Paid') fetchPendingExpenses();
       resetForm();
+      setShowCalculator(false); // Close modal on save
       
     } catch (error) {
       errorToast(error.response?.data?.message || error.message || "Failed to save record");
@@ -319,7 +377,6 @@ export default function EmployeeSalaryPage() {
           : r
       ));
       
-      // Update selected record if modal is open
       if(isFromModal) {
          setSelectedRecord(prev => ({...prev, status: 'Paid', paidDate: new Date().toISOString() }));
       }
@@ -334,7 +391,7 @@ export default function EmployeeSalaryPage() {
   };
 
   const handleDeleteRecord = async () => {
-    const target = recordToDelete || selectedRecord; // Handle delete from table or modal
+    const target = recordToDelete || selectedRecord; 
     if (!target) return;
     
     setDeleting(true);
@@ -345,7 +402,6 @@ export default function EmployeeSalaryPage() {
       setSalaryRecords(prev => prev.filter(r => (r._id || r.id) !== (target._id || target.id)));
       successToast("Record deleted");
       
-      // Close all modals
       setDeleteModalOpen(false);
       setViewModalOpen(false); 
       setRecordToDelete(null);
@@ -423,7 +479,7 @@ export default function EmployeeSalaryPage() {
   }, [salaryRecords, selectedStatus]);
 
 
-  if (loading) return <CustomLoader/>
+  if (loading && !showCalculator) return <CustomLoader/> // Show loader only on initial page load
   
   return (
     <div className="">
@@ -447,7 +503,7 @@ export default function EmployeeSalaryPage() {
         </dialog>
       )}
 
-      {/* --- UPDATE: New Detail Modal --- */}
+      {/* View Detail Modal */}
       {viewModalOpen && selectedRecord && (
         <dialog className="modal modal-open z-50">
           <div className="modal-box rounded-xl max-w-2xl p-0 overflow-hidden bg-base-100 shadow-2xl">
@@ -519,15 +575,13 @@ export default function EmployeeSalaryPage() {
 
             {/* Modal Actions */}
             <div className="p-4 bg-base-200/30 border-t border-base-200 flex gap-3 justify-end">
-                 {/* Delete Button */}
                  <button 
-                    onClick={() => setDeleteModalOpen(true)} // Triggers the delete confirmation
+                    onClick={() => setDeleteModalOpen(true)}
                     className="btn btn-ghost text-error hover:bg-error/10"
                 >
                     <Trash2 size={18}/> Delete
                 </button>
 
-                {/* Download Button */}
                 <button 
                     onClick={() => handleExportSingle(selectedRecord)} 
                     className="btn btn-outline"
@@ -535,7 +589,6 @@ export default function EmployeeSalaryPage() {
                     <Download size={18}/> Download
                 </button>
 
-                {/* Mark as Paid Button */}
                 {selectedRecord.status !== 'Paid' && (
                     <button 
                         onClick={() => handleQuickPay(selectedRecord, true)} 
@@ -563,7 +616,7 @@ export default function EmployeeSalaryPage() {
 
       <div className=" space-y-6 mt-10">
 
-        {/* Stats Grid - Same as before */}
+        {/* Stats Grid */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
             <div className="stats shadow bg-base-100">
             <div className="stat">
@@ -621,11 +674,12 @@ export default function EmployeeSalaryPage() {
              <button onClick={() => router.back()} className="btn btn-outline btn-sm">
                 <ArrowLeft size={16} /> Back
              </button>
+             {/* -- UPDATE: Changed onClick to handleOpenCalculator -- */}
              <button 
-                onClick={() => setShowCalculator(true)} 
+                onClick={handleOpenCalculator} 
                 className={`btn btn-sm text-white border-none bg-[var(--primary-color)] hover:bg-[var(--primary-color)]/90 ${showCalculator ? 'btn-disabled' : ''}`}
              >
-                <Plus size={16} /> Create Salary
+                {loading && !showCalculator ? <span className="loading loading-spinner loading-xs"/> : <Plus size={16} />} Create Salary
              </button>
           </div>
         </div>
@@ -638,7 +692,8 @@ export default function EmployeeSalaryPage() {
                 <h3 className="card-title text-lg flex items-center gap-2">
                   <Calculator className="text-[var(--primary-color)]" size={20} /> New Salary Calculation
                 </h3>
-                <button onClick={resetForm} className="btn btn-ghost btn-sm btn-circle"><X size={20}/></button>
+                {/* -- UPDATE: Use closeCalculator to reset form properly -- */}
+                <button onClick={closeCalculator} className="btn btn-ghost btn-sm btn-circle"><X size={20}/></button>
               </div>
 
               <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
@@ -650,17 +705,15 @@ export default function EmployeeSalaryPage() {
                   <div className="bg-base-200/50 p-4 rounded-lg">
                     <h4 className="font-semibold text-sm mb-3 flex items-center gap-2"><Calendar size={16}/> Period & Project</h4>
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4">
-                         {/* -- UPDATE: Project Dropdown -- */}
-                         <div className="form-control w-full"> 
+                          <div className="form-control w-full"> 
                             <label className="label text-xs opacity-70 block">Select Project</label>
-                           < div className="w-full">
+                           <div className="w-full">
                             <CustomDropdown 
                                 value={formData.projectName || "Select Project"} 
                                 setValue={handleProjectSelect} 
                                 dropdownMenu={projectOptions} 
                             />
                             </div>
-
                         </div>
                         <div className="form-control">
                             <label className="label text-xs opacity-70">Quick Select Month</label>
@@ -708,13 +761,13 @@ export default function EmployeeSalaryPage() {
                     </div>
                   </div>
 
-                  {/* 4. DB EXPENSES TABLE - Same as before */}
+                  {/* 4. DB EXPENSES TABLE */}
                   <div className="bg-base-100 border border-base-200 rounded-lg p-4">
                     <h4 className="font-semibold text-sm mb-2 flex items-center gap-2">
                         <Receipt size={16} className="text-warning"/> Pending Liabilities (Database)
                     </h4>
                     {pendingExpenses.length === 0 ? (
-                         <p className="text-xs opacity-50 italic">No pending expenses found for this employee.</p>
+                          <p className="text-xs opacity-50 italic">No pending expenses found for this employee.</p>
                     ) : (
                         <div className="overflow-x-auto">
                             <table className="table table-xs">
@@ -818,7 +871,7 @@ export default function EmployeeSalaryPage() {
                             disabled={paying}
                             className="btn btn-outline w-full rounded-sm"
                           >
-                            <Save size={16} /> Save 
+                            <Save size={16} /> Draft
                           </button>
                           <button 
                             onClick={() => handleSaveRecord('Paid')} 
@@ -867,14 +920,13 @@ export default function EmployeeSalaryPage() {
                     <th className="text-right">Deductions</th>
                     <th className="text-right">Net Pay</th>
                     <th>Status</th>
-                    <th className="text-right">Actions</th>
+                  
                   </tr>
                 </thead>
                 <tbody>
                   {filteredRecords.length === 0 ? (
                     <tr><td colSpan="6" className="text-center py-10 opacity-50">No salary records found.</td></tr>
                   ) : filteredRecords.map((record) => (
-                    // -- UPDATE: Row click opens modal --
                     <tr 
                         key={record._id || record.id} 
                         className="hover:bg-base-100 group transition-colors cursor-pointer"
@@ -906,12 +958,7 @@ export default function EmployeeSalaryPage() {
                           {record.status}
                         </span>
                       </td>
-                      <td className="text-right">
-                        {/* -- UPDATE: Removed buttons here to keep it minimal as requested, or keep just an eye icon -- */}
-                        <button className="btn btn-sm btn-ghost text-base-content/50 group-hover:text-base-content">
-                            <Eye size={18}/>
-                        </button>
-                      </td>
+                      
                     </tr>
                   ))}
                 </tbody>
