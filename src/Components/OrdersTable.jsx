@@ -98,7 +98,7 @@ export default function RecentProjectsTable() {
               <tr 
                 key={project._id || idx} 
                 className="hover:bg-base-200/40 transition cursor-pointer"
-                onClick={() => router.push(`/Dashboard/Projects/${project._id}`)} // Optional: Navigate on click
+                
               >
                 <td>
                   <div className="font-medium">{project.name}</div>

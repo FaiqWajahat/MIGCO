@@ -224,25 +224,26 @@ const SalaryListTable = ({ data = [], isLoading, onDelete }) => {
                 <X className="h-4 w-4" />
               </button>
 
-              <div className="flex items-start gap-4">
+              <div className="flex items-start  gap-4">
                  <div className="p-3 bg-white shadow-sm rounded-xl border border-base-200">
                     <Briefcase className="w-8 h-8 text-[var(--primary-color)]" />
                  </div>
                  <div>
                     <h2 className="text-xl font-bold text-base-content">{selectedList.projectName}</h2>
-                    <div className="flex items-center gap-2 mt-1 text-sm text-base-content/60">
+                    <div className="flex flex-wrap items-center gap-2 mt-1 text-sm text-base-content/60">
                         <Calendar className="w-3 h-3" />
                         {formatDate(selectedList.date)}
                         <span className="mx-1">•</span>
-                        <User className="w-3 h-3" />
-                        Foreman: {selectedList.foremanName}
+                        <div className='flex gap-1 items-center'> <User className="w-3 h-3" />
+                        Foreman: {selectedList.foremanName}</div>
+                        
                     </div>
                  </div>
               </div>
             </div>
 
             {/* Modal Body - Summary Stats */}
-            <div className="grid grid-cols-2 gap-4 px-8 py-4 bg-base-200/30 border-b border-base-200">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 px-8 py-4 bg-base-200/30 border-b border-base-200">
                 <div className="p-3 bg-base-100 rounded-lg border border-base-200 shadow-sm flex items-center gap-3">
                     <div className="p-2 bg-blue-50 text-blue-600 rounded-md">
                         <Users className="w-5 h-5" />
