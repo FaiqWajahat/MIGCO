@@ -9,12 +9,14 @@ import {
   FileText, 
   Briefcase, 
   User, 
-  Hash, 
   DollarSign, 
   CheckCircle,
   Clock,
   XCircle,
-  Send
+  Send,
+  Eye,       // Icon for View
+  Download,   // Icon for Download
+  CalendarRange
 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { successToast, errorToast } from '@/lib/toast';
@@ -58,7 +60,7 @@ const QuotationTable = ({ quotations, isLoading, onDeleteQuotation }) => {
     }
   };
 
-  // Format Currency (Assuming SAR based on your profile, or generic)
+  // Format Currency
   const formatCurrency = (amount) => {
     return new Intl.NumberFormat('en-SA', { style: 'currency', currency: 'SAR' }).format(amount);
   };
@@ -91,7 +93,6 @@ const QuotationTable = ({ quotations, isLoading, onDeleteQuotation }) => {
 
     setIsDeleting(true);
     try {
-      // Assuming API endpoint based on your structure
       const response = await axios.delete('/api/quotation/deleteQuotation', {
         data: { quotationId: deleteConfirm._id }
       });
@@ -103,16 +104,12 @@ const QuotationTable = ({ quotations, isLoading, onDeleteQuotation }) => {
         return;
       }
 
-      // Call parent callback to refresh list
       if (onDeleteQuotation) {
         onDeleteQuotation(deleteConfirm._id);
       }
 
-      // Close modals
       setDeleteConfirm(null);
       closeDialog();
-      
-      // Show success message
       successToast(response.data.message || 'Quotation deleted successfully');
       
     } catch (error) {
@@ -124,6 +121,29 @@ const QuotationTable = ({ quotations, isLoading, onDeleteQuotation }) => {
       setIsDeleting(false);
     }
   };
+
+  // --- DOWNLOAD HANDLER ---
+  const handleDownload = (e, url, fileName) => {
+    e.stopPropagation(); // Prevent modal from closing if inside one
+    if (!url) return;
+
+    // Create a temporary link to trigger download
+    const link = document.createElement('a');
+    link.href = url;
+    link.setAttribute('download', fileName || 'document'); 
+    link.setAttribute('target', '_blank'); // Fallback for some browsers
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
+  // --- VIEW HANDLER ---
+  const handleView = (e, url) => {
+    e.stopPropagation();
+    if (!url) return;
+    window.open(url, '_blank', 'noopener,noreferrer');
+  };
+
 
   // Loading State
   if (isLoading) {
@@ -157,8 +177,9 @@ const QuotationTable = ({ quotations, isLoading, onDeleteQuotation }) => {
             <th>Project Info</th>
             <th>Ref. No</th>
             <th>Status</th>
-            <th>Amount</th>
+          
             <th>Date</th>
+            {/* Added Actions Column Header if needed, usually implicitly at end */}
           </tr>
         </thead>
 
@@ -204,10 +225,7 @@ const QuotationTable = ({ quotations, isLoading, onDeleteQuotation }) => {
                   </span>
                 </td>
 
-                {/* Amount */}
-                <td className="font-medium">
-                    {formatCurrency(quotation.totalAmount)}
-                </td>
+              
 
                 {/* Date */}
                 <td className="table-cell whitespace-nowrap text-sm text-base-content/70">
@@ -250,7 +268,7 @@ const QuotationTable = ({ quotations, isLoading, onDeleteQuotation }) => {
                 
                 <div className="flex-1">
                   <h2 className="text-xl font-bold text-base-content mb-1">
-                    {selectedQuotation.projectName}
+                    {selectedQuotation.clientName}
                   </h2>
                   <p className="text-sm text-base-content/60 font-medium font-mono">
                     #{selectedQuotation.referenceNo}
@@ -267,73 +285,75 @@ const QuotationTable = ({ quotations, isLoading, onDeleteQuotation }) => {
 
             {/* Content Section */}
             <div className="px-8 py-6 space-y-5 overflow-y-auto flex-1">
-              {/* Client & Role Information */}
+              
+              {/* --- DOCUMENT PREVIEW SECTION (NEW) --- */}
+              {selectedQuotation.documentUrl && (
+                <div className="bg-base-200/50 rounded-lg p-4 border border-base-200">
+                  <h3 className="text-xs font-semibold text-base-content/50 uppercase tracking-wider mb-3">
+                    Attached Document
+                  </h3>
+                  <div className="flex flex-col sm:flex-row gap-3">
+                    <button 
+                      onClick={(e) => handleView(e, selectedQuotation.documentUrl)}
+                      className="btn btn-sm btn-outline gap-2 flex-1"
+                    >
+                      <Eye className="w-4 h-4" />
+                      View Document
+                    </button>
+                    <button 
+                      onClick={(e) => handleDownload(e, selectedQuotation.documentUrl, `${selectedQuotation.projectName}_doc`)}
+                      className="btn btn-sm btn-outline gap-2 flex-1"
+                    >
+                      <Download className="w-4 h-4" />
+                      Download
+                    </button>
+                  </div>
+                </div>
+              )}
+              {/* -------------------------------------- */}
+
+              {/* Client Details */}
               <div>
                 <h3 className="text-xs font-semibold text-base-content/50 uppercase tracking-wider mb-3">
                   Client Details
                 </h3>
                 <div className="space-y-3">
                   {/* Client Name */}
-                  <div className="flex items-center gap-3 group">
+                  <div className="grid  grid-cols-1 gap-3 group">
+                    <div className='flex items-center gap-3'>
                     <div className="w-9 h-9 rounded-lg bg-base-200 flex items-center justify-center flex-shrink-0 group-hover:bg-base-300 transition-colors">
                       <User className="h-4 w-4 text-base-content/70" />
                     </div>
                     <div className="flex-1 min-w-0">
-                      <p className="text-xs text-base-content/50 font-medium">Client Name</p>
+                      <p className="text-xs text-base-content/50 font-medium">Project Name</p>
                       <p className="text-sm font-medium truncate">
-                        {selectedQuotation.clientName || 'N/A'}
+                        {selectedQuotation.projectName || 'N/A'}
                       </p>
                     </div>
-                  </div>
+                    </div>
 
-            
+                     <div className='flex items-center gap-3'>
+                    <div className="w-9 h-9 rounded-lg bg-base-200 flex items-center justify-center flex-shrink-0 group-hover:bg-base-300 transition-colors">
+                      <CalendarRange className="h-4 w-4 text-base-content/70" />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-xs text-base-content/50 font-medium">Project Name</p>
+                      <p className="text-sm font-medium truncate">
+                         {formatDate(selectedQuotation.date) || 'N/A'}
+                      </p>
+                    </div>
+                    </div>
+                  
+                  </div>
                 </div>
               </div>
 
               <div className="border-t border-base-200"></div>
 
-              {/* Financial & Date Details */}
-              <div>
-                <h3 className="text-xs font-semibold text-base-content/50 uppercase tracking-wider mb-3">
-                  Quotation Details
-                </h3>
-                <div className="grid grid-cols-2 gap-3">
-                  {/* Date */}
-                  <div className="flex items-center gap-3 p-3 rounded-lg bg-base-200/50">
-                    <Calendar className="h-4 w-4 text-base-content/50 flex-shrink-0" />
-                    <div className="min-w-0">
-                      <p className="text-xs text-base-content/50 font-medium">Date</p>
-                      <p className="text-sm font-semibold">
-                        {formatDate(selectedQuotation.date)}
-                      </p>
-                    </div>
-                  </div>
-
-                  {/* Total Amount */}
-                  <div className="flex items-center gap-3 p-3 rounded-lg bg-base-200/50">
-                    <DollarSign className="h-4 w-4 text-base-content/50 flex-shrink-0" />
-                    <div className="min-w-0">
-                      <p className="text-xs text-base-content/50 font-medium">Total Amount</p>
-                      <p className="text-sm font-semibold">
-                        {formatCurrency(selectedQuotation.totalAmount)}
-                      </p>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Notes (if any) */}
-                {selectedQuotation.notes && (
-                    <div className="mt-4 p-3 rounded-lg bg-base-200/30 border border-base-200">
-                        <p className="text-xs text-base-content/50 font-medium mb-1">Notes</p>
-                        <p className="text-sm text-base-content/80 whitespace-pre-wrap">{selectedQuotation.notes}</p>
-                    </div>
-                )}
-              </div>
             </div>
 
             {/* Footer Actions */}
             <div className="flex items-center gap-3 px-4 py-5 bg-base-200/30 border-t border-base-200 flex-shrink-0">
-           
               <button 
                 onClick={() => router.push(`/Dashboard/Quotations/Edit/${selectedQuotation._id}`)} 
                 className="btn bg-[var(--primary-color)] text-white rounded-sm flex-1 gap-2 shadow-sm "
@@ -381,7 +401,7 @@ const QuotationTable = ({ quotations, isLoading, onDeleteQuotation }) => {
               <p className="text-sm text-base-content/70 text-center mb-6">
                 Are you sure you want to delete the quotation for{" "}
                 <span className="font-semibold text-base-content">
-                  {deleteConfirm.projectName}
+                  {deleteConfirm.clientName}
                 </span>
                 ? This action cannot be undone.
               </p>

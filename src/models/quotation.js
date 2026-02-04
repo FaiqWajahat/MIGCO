@@ -5,12 +5,13 @@ const QuotationSchema = new mongoose.Schema(
   {
     clientName: {
       type: String,
+      required: true
       
   
     },
     projectName: {
       type: String,
-      required: true
+   
      
      
     },
@@ -26,20 +27,13 @@ const QuotationSchema = new mongoose.Schema(
       default: null,
     },
 
-    totalAmount: {
-      type: Number,
-      default: 0.00,
-    },
     status: {
      type:String,
      default:"Draft",
     enum: ['Draft', 'Sent', 'Accepted', 'Rejected' ]
 
     },
-    notes: {
-        type: String,
-        
-    },
+   documentUrl: { type: String },
   },
   { 
     timestamps: true
